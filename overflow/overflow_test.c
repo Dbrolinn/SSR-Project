@@ -69,10 +69,11 @@ int main() {
     int x = INT_MAX;
     char *high_ptr = (char *)(uintptr_t) UINTPTR_MAX - 5;
 
+    //? Analysis of the offset value initialization
     int lower_bound = -20;
     int upper_bound = 20;
     int offset = rand() % (upper_bound - lower_bound + 1) + lower_bound;
-
+    // int offset = 16;
 
     int dummy_result;
     bool actual_overflow = __builtin_add_overflow(x, offset, &dummy_result);

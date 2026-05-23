@@ -1,0 +1,362 @@
+❯ ./overflow_tester.sh
+##################################################
+ Running test suite for compiler: gcc
+##################################################
+>>> Compiling: gcc (No flags / Default)
+======================================================================
+ Testing x = 2147483647, offset = 3
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CISB DETECTED] (Compiler eliminated check)
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: gcc -O0
+======================================================================
+ Testing x = 2147483647, offset = 3
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CISB DETECTED] (Compiler eliminated check)
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: gcc -O2
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CISB DETECTED] (Compiler eliminated check)
+  [2] Naive with buffer:                        [CISB DETECTED] (Compiler eliminated check)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: gcc -O3
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CISB DETECTED] (Compiler eliminated check)
+  [2] Naive with buffer:                        [CISB DETECTED] (Compiler eliminated check)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: gcc -O2 -fwrapv
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CORRECT]
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: gcc -O2 -fno-strict-overflow
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CORRECT]
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CORRECT]
+======================================================================
+
+>>> Compiling: gcc -O0 -fsanitize=undefined
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+overflow_test.c:14:15: runtime error: signed integer overflow: 2147483647 + 14 cannot be represented in type 'int'
+  [1] Naive (x + offset < x):                   [CORRECT]
+overflow_test.c:19:9: runtime error: signed integer overflow: 2147483647 + 14 cannot be represented in type 'int'
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+##################################################
+ Running test suite for compiler: clang
+##################################################
+>>> Compiling: clang (No flags / Default)
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CORRECT]
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CORRECT]
+======================================================================
+
+>>> Compiling: clang -O0
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CORRECT]
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CORRECT]
+======================================================================
+
+>>> Compiling: clang -O2
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CISB DETECTED] (Compiler eliminated check)
+  [2] Naive with buffer:                        [CISB DETECTED] (Compiler eliminated check)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: clang -O3
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CISB DETECTED] (Compiler eliminated check)
+  [2] Naive with buffer:                        [CISB DETECTED] (Compiler eliminated check)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: clang -O2 -fwrapv
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [CORRECT]
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [CISB DETECTED] (Compiler eliminated check)
+======================================================================
+
+>>> Compiling: clang -O0 -fsanitize=undefined
+======================================================================
+ Testing x = 2147483647, offset = 14
+ Ground Truth: Did it actually overflow? --> YES
+----------------------------------------------------------------------
+overflow_test.c:14:15: runtime error: signed integer overflow: 2147483647 + 14 cannot be represented in type 'int'
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior overflow_test.c:14:15
+  [1] Naive (x + offset < x):                   [CORRECT]
+overflow_test.c:19:18: runtime error: signed integer overflow: 2147483647 + 14 cannot be represented in type 'int'
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior overflow_test.c:19:18
+  [2] Naive with buffer:                        [CORRECT]
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [CISB DETECTED] (Compiler eliminated check)
+  [5] Compiler builtin:                         [CORRECT]
+overflow_test.c:43:18: runtime error: pointer index expression with base 0xfffffffffffffffa overflowed to 0x000000000008
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior overflow_test.c:43:18
+  [6] Pointer math:                             [CORRECT]
+======================================================================
+
+All test suites completed!
+
+
+-----------------------------------------------------------------------
+##################################################
+ Running test suite for compiler: gcc
+##################################################
+>>> Compiling: gcc (No flags / Default)
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: gcc -O0
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: gcc -O2
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: gcc -O3
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: gcc -O2 -fwrapv
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: gcc -O2 -fno-strict-overflow
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: gcc -O0 -fsanitize=undefined
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)                 [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+##################################################
+ Running test suite for compiler: clang
+##################################################
+>>> Compiling: clang (No flags / Default)
+======================================================================
+ Testing x = 2147483647, offset = -7
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: clang -O0
+======================================================================
+ Testing x = 2147483647, offset = -5
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: clang -O2
+======================================================================
+ Testing x = 2147483647, offset = -5
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: clang -O3
+======================================================================
+ Testing x = 2147483647, offset = -5
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: clang -O2 -fwrapv
+======================================================================
+ Testing x = 2147483647, offset = -5
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+>>> Compiling: clang -O0 -fsanitize=undefined
+======================================================================
+ Testing x = 2147483647, offset = -5
+ Ground Truth: Did it actually overflow? --> NO
+----------------------------------------------------------------------
+  [1] Naive (x + offset < x):                   [LOGIC FLAW] (False Positive)
+  [2] Naive with buffer:                        [LOGIC FLAW] (False Positive)
+  [3] Safe pre-condition:                       [CORRECT]
+  [4] Unsigned cast wrap:                       [LOGIC FLAW] (False Positive)
+  [5] Compiler builtin:                         [CORRECT]
+  [6] Pointer math:                             [LOGIC FLAW] (False Positive)
+======================================================================
+
+All test suites completed!

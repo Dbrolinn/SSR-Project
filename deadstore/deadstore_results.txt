@@ -1,0 +1,149 @@
+##########################################
+function: process_secret_insecure function
+##########################################
+compile: gcc 16.1 -O0 => result: [CORRECT]
+compile: gcc 16.1 -O2 => result: [CISB DETECTED]
+compile: gcc 16.1 -O3 => result: [CISB DETECTED]
+compile: gcc 16.1 -O3 -fno-builtin => result: [CISB DETECTED]
+compile: gcc 16.1 -O3 -fno-builtin-memset => result: [CORRECT]
+
+`c
+    memset(secret, 0, sizeof(secret));
+`
+-> with '-O0' flag
+`assembly
+        lea     rax, [rbp-80]
+        mov     edx, 64
+        mov     esi, 0
+        mov     rdi, rax
+        call    "memset"
+`
+-> with '-O3 -fno-builtin-memset' flag
+`assembly
+        xor     esi, esi
+        mov     eax, 522133279
+        movdqa  xmm6, xmm4
+        movdqa  xmm5, xmm4
+        mov     rdi, rsp
+        movd    xmm1, eax
+        pcmpgtb xmm6, xmm0
+        movdqa  xmm2, xmm0
+        mov     edx, 64
+        pshufd  xmm1, xmm1, 0
+        pcmpgtb xmm5, xmm1
+        movdqa  xmm3, xmm1
+        movdqa  xmm7, xmm4
+        punpcklbw       xmm2, xmm6
+        punpckhbw       xmm0, xmm6
+        movdqa  xmm6, xmm4
+        punpcklbw       xmm3, xmm5
+        punpckhbw       xmm1, xmm5
+        pmaddwd xmm2, xmm3
+        pmaddwd xmm0, xmm1
+        movdqa  xmm5, xmm2
+        paddd   xmm5, xmm0
+        movdqa  xmm0, XMMWORD PTR [rsp+16]
+        pcmpgtb xmm6, xmm0
+        movdqa  xmm2, xmm0
+        punpcklbw       xmm2, xmm6
+        punpckhbw       xmm0, xmm6
+        pmaddwd xmm2, xmm3
+        pmaddwd xmm0, xmm1
+        movdqa  xmm6, xmm2
+        movdqa  xmm2, XMMWORD PTR [rsp+32]
+        paddd   xmm6, xmm0
+        [...]
+        call    "memset"
+`
+-> with all other flags: [ERASED]
+
+compile: clang 22.1.0 -O0 => result: [CORRECT]
+compile: clang 22.1.0 -O2 => result: [CISB DETECTED]
+compile: clang 22.1.0 -O3 => result: [CISB DETECTED]
+compile: clang 22.1.0 -O3 -fno-builtin => result: [CORRECT]
+
+-> with '-O0' flag
+`assembly
+        lea     rdi, [rbp - 80]
+        xor     esi, esi
+        mov     edx, 64
+        call    memset@PLT
+`
+
+-> with '-O3 -fno-builtin' flag
+
+`assembly
+        mov     edx, 64
+        mov     rdi, rbx
+        xor     esi, esi
+        call    memset@PLT
+`
+
+##########################################
+function: process_secret_insecure function
+##########################################
+compile: gcc 16.1 -O0 => result: [CORRECT]
+compile: gcc 16.1 -O2 => result: [CORRECT]
+compile: gcc 16.1 -O3 => result: [CORRECT]
+
+`c
+    volatile char* v_secret = (volatile char*)secret;   // [1]
+    for (size_t i = 0; i < sizeof(secret); i++) {       // [2]
+        v_secret[i] = 0;                                // [3]
+    }
+`
+-> with '-O0' flag
+`assembly
+        lea     rax, [rbp-96]                           // [1]
+        mov     QWORD PTR [rbp-24], rax                 // [1]
+        mov     QWORD PTR [rbp-16], 0                   // [3]       
+        jmp     .L4                                     // [3]  
+.L5:
+        mov     rdx, QWORD PTR [rbp-24]                 // [3]
+        mov     rax, QWORD PTR [rbp-16]                 // [3]
+        add     rax, rdx                                // [3]
+        mov     BYTE PTR [rax], 0                       // [3]
+        add     QWORD PTR [rbp-16], 1                   // [2]
+.L4:
+        cmp     QWORD PTR [rbp-16], 63                  // [2]
+        jbe     .L5                                     // [2]
+`
+
+-> with all other flags:
+`assembly
+.L2:
+        mov     BYTE PTR [rax], 0                       // [3]  
+        lea     rcx, [rsp+64]                           // [2]
+        add     rax, 2                                  // [2]  
+        mov     BYTE PTR [rax-1], 0                     // [3]
+        cmp     rax, rcx                                // [2]
+        jne     .L2                                     // [2]
+`
+
+compile: clang 22.1.0 -O0 => result: [CORRECT]
+compile: clang 22.1.0 -O2 => result: [CORRECT]
+compile: clang 22.1.0 -O3 => result: [CORRECT]
+
+##########################################
+function: process_secret_barrier function
+##########################################
+compile: gcc 16.1 -O0 => result: [CORRECT]
+compile: gcc 16.1 -O2 => result: [CORRECT]
+compile: gcc 16.1 -O3 => result: [CORRECT]
+compile: gcc 16.1 -O3 -fno-builtin => result: [CORRECT]
+
+compile: clang 22.1.0 -O0 => result: [CORRECT]
+compile: clang 22.1.0 -O2 => result: [CORRECT]
+compile: clang 22.1.0 -O3 => result: [CORRECT]
+
+##########################################
+function: process_secret_explicit function
+##########################################
+compile: gcc 16.1 -O0 => result: [CORRECT]
+compile: gcc 16.1 -O2 => result: [CORRECT]
+compile: gcc 16.1 -O3 => result: [CORRECT]
+
+compile: clang 22.1.0 -O0 => result: [CORRECT]
+compile: clang 22.1.0 -O2 => result: [CORRECT]
+compile: clang 22.1.0 -O3 => result: [CORRECT]
+

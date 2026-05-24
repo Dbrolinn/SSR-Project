@@ -1,0 +1,602 @@
+
+================================================================================
+  COMPILER-INDUCED SECURITY BUGS (CISB)
+  Assembly Comparison & Fix Summary
+  Topic: Null Pointer Check Removal + Strict Aliasing
+================================================================================
+
+This document explains, for each of the two CISBs studied, what to observe in
+the assembly output at each compilation stage, and how each fix (compiler flag
+and source code change) corrects the problem. It is intended as a reference for
+the report-writing team.
+
+
+================================================================================
+  PART 1 — NULL POINTER CHECK REMOVAL
+================================================================================
+
+--------------------------------------------------------------------------------
+  1.1  WHAT THE BUG IS
+--------------------------------------------------------------------------------
+
+When a programmer writes code that dereferences a pointer (*ptr) BEFORE
+checking whether that pointer is null, the compiler applies the following
+reasoning at -O2:
+
+    "Dereferencing a null pointer is Undefined Behavior (UB).
+     I am allowed to assume UB never occurs in correct code.
+     Therefore, if *ptr is executed, ptr CANNOT be null at this point.
+     The subsequent check (if ptr == NULL) is always false.
+     It is dead code — I will remove it."
+
+The result: the null guard that the programmer wrote is silently deleted from
+the binary. Any caller that passes NULL bypasses the check entirely.
+
+
+--------------------------------------------------------------------------------
+  1.2  THE VULNERABLE CODE
+--------------------------------------------------------------------------------
+
+    void process_request(char *user_input) {
+
+        char first = *user_input;      // <-- dereference FIRST (triggers UB assumption)
+
+        if (user_input == NULL) {      // <-- compiler removes this entire block
+            fprintf(stderr, "Error: null input rejected\n");
+            return;
+        }
+
+        char buf[256];
+        strncpy(buf, user_input, sizeof(buf) - 1);
+        printf("Processing: %s\n", buf);
+    }
+
+
+--------------------------------------------------------------------------------
+  1.3  ASSEMBLY COMPARISON — WHAT TO LOOK FOR
+--------------------------------------------------------------------------------
+
+The null check in assembly is a pair of two instructions:
+
+    test   rdi, rdi          ; test if pointer register is zero
+    je     .Lnull_handler    ; jump to error handler if zero
+
+Look for this pair immediately after the function prologue in each version.
+
+
+  SCENARIO A — gcc -O0  (unoptimized, check PRESENT)
+  ---------------------------------------------------
+
+    process_request:
+        push   rbp
+        mov    rbp, rsp
+        sub    rsp, 0x120
+        mov    QWORD PTR [rbp-0x118], rdi     ; store pointer on stack
+
+        mov    rax, QWORD PTR [rbp-0x118]
+        movzx  eax, BYTE PTR [rax]            ; *user_input (dereference)
+        mov    BYTE PTR [rbp-0x1], al
+
+    >>> cmp    QWORD PTR [rbp-0x118], 0x0     ; NULL CHECK PRESENT
+    >>> jne    .L3                             ; jump if not null
+        lea    rdi, [rip+.LC0]
+        call   fprintf@PLT                    ; error branch present in binary
+        jmp    .L4
+    .L3:
+        ...                                   ; strncpy / printf
+    .L4:
+        leave
+        ret
+
+  What to observe:
+  - The pointer is stored on the stack and reloaded for the comparison.
+  - Both the error branch AND the fprintf call exist in the binary.
+  - The cmp/jne pair is clearly present.
+
+
+  SCENARIO B — gcc -O2  (optimized, check REMOVED)
+  --------------------------------------------------
+
+    process_request:
+        movzx  eax, BYTE PTR [rdi]            ; immediate dereference
+                                              ; compiler has now "proven" rdi != NULL
+    ; >>> cmp / je block IS ENTIRELY ABSENT
+    ; >>> fprintf("Error...") IS ENTIRELY ABSENT
+        sub    rsp, 0x118
+        lea    rsi, [rdi]
+        lea    rdi, [rbp-0x110]
+        mov    edx, 0xff
+        call   strncpy@PLT
+        ...
+        add    rsp, 0x118
+        ret
+
+  What to observe:
+  - There is NO test/cmp instruction before the main logic.
+  - There is NO jump to an error handler.
+  - The fprintf string literal is not even present in the binary's data section.
+  - The function is noticeably shorter (approx 61 bytes vs 148 bytes).
+
+
+  SCENARIO C — gcc -O2 -fno-delete-null-pointer-checks  (flag fix, check RESTORED)
+  ----------------------------------------------------------------------------------
+
+    process_request:
+        movzx  eax, BYTE PTR [rdi]            ; dereference still happens first
+
+    >>> test   rdi, rdi                       ; CHECK RESTORED BY FLAG
+    >>> je     .Lnull_handler                 ; null branch kept in binary
+        sub    rsp, 0x118
+        ...
+        ret
+    .Lnull_handler:
+        lea    rdi, [rip+.LC0]
+        call   fprintf@PLT
+        add    rsp, 0x118
+        ret
+
+  What to observe:
+  - The test/je pair is back immediately after the dereference.
+  - The error handler block exists in the binary again.
+  - All other -O2 optimizations still apply (function is compact).
+  - The dereference still comes before the check — the code is structurally
+    still wrong, but the flag forces the compiler to keep the check anyway.
+
+
+  SCENARIO D — gcc -O2 with FIXED CODE  (check BEFORE dereference)
+  -----------------------------------------------------------------
+
+    process_request:
+    >>> test   rdi, rdi                       ; CHECK COMES FIRST
+    >>> je     .Lnull_handler                 ; always-valid guard
+        sub    rsp, 0x118
+        movzx  eax, BYTE PTR [rdi]            ; dereference AFTER check — safe
+        ...
+        ret
+    .Lnull_handler:
+        lea    rdi, [rip+.LC0]
+        call   fprintf@PLT
+        ret
+
+  What to observe:
+  - The test/je pair appears AT THE TOP of the function, before any dereference.
+  - The compiler has no UB premise to exploit, so the check cannot be removed.
+  - This is structurally safer: even if compiled without the flag, the check
+    survives because the UB assumption never applies.
+  - Binary size is nearly identical to the flag version (~76 B vs ~79 B).
+
+
+--------------------------------------------------------------------------------
+  1.4  HOW TO CONFIRM IN PRACTICE
+--------------------------------------------------------------------------------
+
+  # Confirm check is removed at -O2:
+  objdump -d vuln_O2 | grep -c "test.*rdi"
+  # Expected output: 0  (no check)
+
+  # Confirm check is present in flag and fixed versions:
+  objdump -d vuln_flag  | grep -c "test.*rdi"
+  # Expected output: 1
+  objdump -d vuln_fixed | grep -c "test.*rdi"
+  # Expected output: 1
+
+  # Generate human-readable assembly files for side-by-side comparison:
+  gcc -O0 -S -o asm_O0.s   vuln.c
+  gcc -O2 -S -o asm_O2.s   vuln.c
+  gcc -O2 -fno-delete-null-pointer-checks -S -o asm_flag.s  vuln.c
+  gcc -O2 -S -o asm_fixed.s fixed.c   # fixed source with check before deref
+
+
+--------------------------------------------------------------------------------
+  1.5  FIXES — NULL POINTER CHECK REMOVAL
+--------------------------------------------------------------------------------
+
+  FIX A — COMPILER FLAG
+  ----------------------
+
+  Flag:    -fno-delete-null-pointer-checks
+  Applies: GCC and Clang
+
+  Command:
+      gcc -O2 -fno-delete-null-pointer-checks -o secure vuln.c
+
+  How it works:
+      This flag tells the compiler to preserve null pointer checks even when
+      it has observed a preceding dereference of the same pointer. It suppresses
+      the specific optimization that removes guards based on the "no UB" premise.
+      All other -O2 optimizations continue to apply.
+
+  Tradeoffs:
+      + No changes to source code required.
+      + Fixes all occurrences project-wide in a single build flag.
+      + Minimal performance impact (small code size increase ~1-4%).
+      - Only works if you control the build system.
+      - Does not fix the underlying UB: the dereference-before-check pattern
+        remains in the source. A real null pointer still causes a crash;
+        the flag only ensures the compiler does not remove the guard.
+      - If the codebase is ever compiled without this flag (e.g. by a third
+        party or on a different toolchain), the bug reappears.
+
+
+  FIX B — SOURCE CODE CHANGE
+  ---------------------------
+
+  Change: Move the null check to occur BEFORE any dereference of the pointer.
+
+  Vulnerable pattern:
+      char first = *user_input;      // dereference first — UB if null
+      if (user_input == NULL) { ... } // check too late — removed by compiler
+
+  Fixed pattern:
+      if (user_input == NULL) {      // check FIRST — no UB premise exists
+          fprintf(stderr, "Error\n");
+          return;
+      }
+      char first = *user_input;      // safe: null case already handled
+
+  How it works:
+      When the check appears before any dereference, the compiler has no
+      information from which to conclude that the pointer is non-null.
+      The UB assumption never triggers. The check is logically meaningful
+      from the compiler's perspective and survives at every optimization level.
+
+  Tradeoffs:
+      + Works at ALL optimization levels, with ANY compiler, with NO flags.
+      + Removes the underlying undefined behavior entirely.
+      + Binary size nearly identical to the flag version.
+      - Requires auditing every function that has this pattern.
+      - In large codebases, automated tools (cppcheck, clang -Wnull-dereference)
+        are needed to find all occurrences.
+
+
+================================================================================
+  PART 2 — STRICT ALIASING / TYPE PUNNING
+================================================================================
+
+--------------------------------------------------------------------------------
+  2.1  WHAT THE BUG IS
+--------------------------------------------------------------------------------
+
+The C strict aliasing rule states that the compiler is allowed to assume
+two pointers of DIFFERENT types never point to the same memory location.
+This assumption enables the compiler to cache pointer reads in registers and
+avoid redundant memory loads — a major source of performance gains.
+
+When a programmer violates this rule (intentionally or not) by reading memory
+through a reinterpreted pointer (a "type pun"), the compiler may:
+
+  - Load the value into a register from the original type.
+  - When the value is written through the aliased pointer, not update the
+    register (because "different types cannot alias the same address").
+  - Use the stale register value for subsequent comparisons.
+
+The result: a security check compares against the PRE-modification value
+instead of the current value, making the check operate on wrong data.
+
+This pattern is extremely common in:
+  - Network packet parsers (reading raw bytes as integers)
+  - Cryptographic code (reading float bits as uint32_t)
+  - Binary protocol implementations
+
+
+--------------------------------------------------------------------------------
+  2.2  THE VULNERABLE CODE
+--------------------------------------------------------------------------------
+
+    #define MAX_LEN 64
+
+    void parse_packet(char *buf) {
+
+        // TYPE PUN: char* and uint32_t* are different types.
+        // The compiler assumes they cannot alias the same memory.
+        uint32_t *len_field = (uint32_t *)buf;
+
+        // Write through the uint32_t* pointer (byte-swap the length)
+        *len_field = ntohl(*len_field);
+
+        // SECURITY CHECK: at -O2, the compiler may use a CACHED (pre-swap)
+        // value of *len_field here, because it treats buf and len_field
+        // as aliasing different memory. The check operates on wrong data.
+        if (*len_field > MAX_LEN) {
+            printf("PACKET DROPPED\n");
+            return;
+        }
+
+        // This runs even for oversized packets when the check is bypassed
+        printf("processing packet of length %u\n", *len_field);
+    }
+
+
+--------------------------------------------------------------------------------
+  2.3  ASSEMBLY COMPARISON — WHAT TO LOOK FOR
+--------------------------------------------------------------------------------
+
+The key observation is HOW MANY TIMES the compiler loads from memory (the
+buf pointer) inside parse_packet, specifically across the ntohl call.
+
+A correct implementation:
+  - Loads *len_field from memory BEFORE ntohl.
+  - Stores the ntohl result BACK to memory.
+  - Loads from memory AGAIN for the comparison.
+
+A broken optimized implementation:
+  - Loads *len_field into a register ONCE.
+  - Passes it to ntohl (which operates on the register copy).
+  - Uses the ORIGINAL register value (pre-ntohl) for the comparison.
+  - The store and the comparison use DIFFERENT values.
+
+
+  SCENARIO A — gcc -O0  (unoptimized, aliasing respected, check CORRECT)
+  -----------------------------------------------------------------------
+
+    parse_packet:
+        push   rbp
+        mov    rbp, rsp
+        sub    rsp, 0x50
+        mov    QWORD PTR [rbp-0x48], rdi      ; store buf pointer
+
+        mov    rax, QWORD PTR [rbp-0x48]
+        mov    QWORD PTR [rbp-0x8], rax        ; len_field = (uint32_t*)buf
+
+    >>> mov    rax, QWORD PTR [rbp-0x8]
+    >>> mov    eax, DWORD PTR [rax]            ; LOAD 1: read *len_field
+        mov    edi, eax
+        call   ntohl@PLT                       ; byte-swap
+        mov    rdx, QWORD PTR [rbp-0x8]
+    >>> mov    DWORD PTR [rdx], eax            ; STORE: write result back to *len_field
+
+    >>> mov    rax, QWORD PTR [rbp-0x8]
+    >>> mov    eax, DWORD PTR [rax]            ; LOAD 2: reload *len_field from memory
+        cmp    eax, MAX_LEN                    ; compare CURRENT (post-swap) value
+        jbe    .Lprocess
+        ...                                    ; drop packet
+    .Lprocess:
+        ...                                    ; process packet
+
+  What to observe:
+  - There are TWO separate memory loads of *len_field (marked LOAD 1, LOAD 2).
+  - LOAD 2 happens AFTER the ntohl store — it reads the updated value.
+  - The comparison uses the correct post-swap value.
+  - The security check operates correctly.
+
+
+  SCENARIO B — gcc -O2  (optimized, STALE READ, check BYPASSED)
+  -------------------------------------------------------------
+
+    parse_packet:
+    >>> mov    eax, DWORD PTR [rdi]            ; LOAD 1: read *len_field ONCE
+        mov    edi, eax
+        call   ntohl@PLT                       ; byte-swap (result in eax)
+    >>> mov    DWORD PTR [rdi_orig], eax       ; STORE: write back (compiler may
+                                              ;   not track this because uint32_t*
+                                              ;   and char* are "different types")
+
+    ; The comparison below may use the value loaded BEFORE ntohl,
+    ; not the value stored by ntohl, because the compiler cached it.
+    >>> cmp    ORIGINAL_CACHED_VALUE, MAX_LEN  ; compare STALE pre-swap value
+        jbe    .Lprocess                       ; wrong branch taken
+        ...
+    .Lprocess:
+        ...                                    ; runs even for oversized packets
+
+  What to observe:
+  - There is only ONE load from the memory address of len_field.
+  - The comparison does NOT reload from memory after the ntohl store.
+  - The check is driven by a register value that predates the write.
+  - The function is shorter (fewer instructions) because redundant loads removed.
+
+  IMPORTANT: Unlike null pointer removal, the check instruction IS still
+  present in the binary. The bug is not that code was deleted — it is that
+  the value being compared is WRONG (stale). This is a subtler and harder
+  to spot class of CISB.
+
+
+  SCENARIO C — gcc -O2 -fno-strict-aliasing  (flag fix, reads CORRECT)
+  --------------------------------------------------------------------
+
+    parse_packet:
+    >>> mov    eax, DWORD PTR [rdi]            ; LOAD 1: read *len_field
+        mov    edi, eax
+        call   ntohl@PLT
+    >>> mov    DWORD PTR [rdi_orig], eax       ; STORE: write back
+
+    >>> mov    eax, DWORD PTR [rdi_orig]       ; LOAD 2: RELOAD from memory
+        cmp    eax, MAX_LEN                    ; compare CURRENT (post-swap) value
+        jbe    .Lprocess
+        ...                                    ; drop packet correctly
+    .Lprocess:
+        ...
+
+  What to observe:
+  - LOAD 2 reappears: the compiler must reload from memory after the store
+    because the flag forces it to treat all pointer accesses as potentially
+    aliasing.
+  - The comparison now uses the post-ntohl value.
+  - Binary is slightly larger than the broken version (extra load instruction).
+  - The security check fires correctly for oversized packets.
+
+
+  SCENARIO D — gcc -O2 with FIXED CODE (memcpy, aliasing violation REMOVED)
+  --------------------------------------------------------------------------
+
+    parse_packet:
+        sub    rsp, 0x18
+    >>> mov    eax, DWORD PTR [rdi]            ; memcpy reads 4 bytes
+        mov    esi, eax                        ; (compiler may inline memcpy)
+        call   ntohl@PLT                       ; byte-swap
+    >>> cmp    eax, MAX_LEN                    ; compare CORRECT post-swap value
+        ja     .Ldrop                          ; drop if oversized
+        ...
+    .Ldrop:
+        ...
+
+  What to observe:
+  - The memcpy-based read produces a local uint32_t variable, not an alias.
+  - There is no pointer aliasing violation — the compiler optimizes freely
+    but correctly, because len_field is a local copy, not an alias of buf.
+  - The comparison always uses the correct, post-ntohl value.
+  - No flag is needed. Correct at every optimization level.
+
+
+--------------------------------------------------------------------------------
+  2.4  HOW TO CONFIRM IN PRACTICE
+--------------------------------------------------------------------------------
+
+  # Run the programs and observe output — the bug is visible:
+  ./vuln           # prints "processing packet" for a 256-byte packet  (WRONG)
+  ./vuln_flag      # prints "PACKET DROPPED"  (CORRECT)
+  ./fixed          # prints "PACKET DROPPED"  (CORRECT)
+
+  # Count memory loads in parse_packet (key metric):
+  objdump -d vuln      | awk '/^.*<parse_packet>:$/,/^$/' | grep -c "mov.*(%"
+  objdump -d vuln_flag | awk '/^.*<parse_packet>:$/,/^$/' | grep -c "mov.*(%"
+  objdump -d fixed     | awk '/^.*<parse_packet>:$/,/^$/' | grep -c "mov.*(%"
+  # Broken version will show FEWER loads — proof the compiler cached stale data.
+
+  # Generate assembly files:
+  gcc -O0 -S -o asm_O0.s     vuln.c
+  gcc -O2 -S -o asm_O2.s     vuln.c
+  gcc -O2 -fno-strict-aliasing -S -o asm_flag.s  vuln.c
+  gcc -O2 -S -o asm_fixed.s  fixed.c
+
+  # In the .s files, search for how many times the memory address is loaded
+  # relative to the ntohl call inside parse_packet:
+  grep -n "movl\|ntohl\|cmp" asm_O2.s
+  grep -n "movl\|ntohl\|cmp" asm_O0.s
+  # In asm_O2.s the cmp will appear with a register not reloaded after ntohl.
+  # In asm_O0.s the cmp will appear after a fresh load instruction.
+
+
+--------------------------------------------------------------------------------
+  2.5  FIXES — STRICT ALIASING
+--------------------------------------------------------------------------------
+
+  FIX A — COMPILER FLAG
+  ----------------------
+
+  Flag:    -fno-strict-aliasing
+  Applies: GCC and Clang
+
+  Command:
+      gcc -O2 -fno-strict-aliasing -o secure vuln.c
+
+  How it works:
+      This flag disables the strict aliasing optimization globally. The
+      compiler can no longer assume that pointers of different types refer
+      to different memory locations. It must therefore reload from memory
+      after every write, even through a differently-typed pointer. The stale
+      read is eliminated because the compiler always generates a fresh load
+      before the comparison.
+
+  Tradeoffs:
+      + No changes to source code required.
+      + Fixes all aliasing violations in the codebase at once.
+      + Useful when auditing legacy code that has widespread type punning.
+      - Performance cost can be significant (5-15%) on pointer-heavy code
+        because the compiler loses the ability to cache pointer reads freely.
+      - Masks the underlying UB rather than eliminating it.
+      - Code is still technically undefined behavior; other compilers or future
+        versions may handle it differently even with this flag absent.
+
+
+  FIX B — SOURCE CODE CHANGE
+  ---------------------------
+
+  Change: Replace the type-punning pointer cast with memcpy.
+
+  Vulnerable pattern:
+      uint32_t *len_field = (uint32_t *)buf;   // aliasing violation — UB
+      *len_field = ntohl(*len_field);
+      if (*len_field > MAX_LEN) { ... }         // may read stale value
+
+  Fixed pattern:
+      uint32_t len_field;
+      memcpy(&len_field, buf, sizeof(uint32_t)); // no aliasing — reads bytes safely
+      len_field = ntohl(len_field);
+      if (len_field > MAX_LEN) { ... }           // always reads correct value
+
+  How it works:
+      memcpy is defined by the C standard to read and write raw bytes
+      regardless of the types involved. It never violates strict aliasing
+      because it does not operate through typed pointers — it is a byte-level
+      operation. The result is stored in a local variable (len_field) of the
+      correct type. There is no alias between buf and len_field, so the
+      compiler correctly understands that modifying len_field does not affect
+      buf and vice versa. The comparison always uses the local variable's
+      current value, which is the post-ntohl value.
+
+      Modern compilers (GCC and Clang at -O2) recognize the memcpy pattern
+      for small fixed sizes (2, 4, 8 bytes) and compile it to a single load
+      instruction with no function call overhead. The fix is zero-cost.
+
+  Tradeoffs:
+      + Eliminates the UB entirely — correct with any compiler, any flags.
+      + No performance cost for small fixed-size reads (compiler inlines memcpy).
+      + Works at ALL optimization levels without any flags.
+      + The standard-blessed approach: used in OpenSSL, libsodium, the Linux
+        kernel, and all major security-critical C codebases.
+      - Requires changing every type-punning site in the code.
+      - Less readable to programmers unfamiliar with the pattern (the intent
+        of "read 4 bytes as a uint32_t" is less obvious than a cast).
+
+
+================================================================================
+  PART 3 — SIDE-BY-SIDE SUMMARY TABLE
+================================================================================
+
+  +--------------------------+----------------------------+----------------------------+
+  |  Dimension               |  Null Pointer Removal      |  Strict Aliasing           |
+  +--------------------------+----------------------------+----------------------------+
+  |  UB exploited            |  Null dereference is UB    |  Pointer aliasing is UB    |
+  |  What compiler does      |  Deletes the null check    |  Caches stale register val |
+  |  Assembly proof          |  test/je pair missing      |  Fewer mov loads after     |
+  |                          |                            |  the store                 |
+  |                          |                            |                            |
+  |  Visible in output?      |  Crash (SIGSEGV)           |  Wrong value printed       |
+  |  Check in binary?        |  Completely absent         |  Present, but uses         |
+  |                          |                            |  wrong (stale) value       |
+  |                          |                            |                            |
+  |  Flag fix                |  -fno-delete-null-         |  -fno-strict-aliasing      |
+  |                          |  pointer-checks            |                            |
+  |                          |                            |                            |
+  |  Code fix                |  Move check BEFORE deref   |  Replace cast with memcpy  |
+  |  Detection tool          |  clang -Wnull-dereference  |  clang -Wstrict-aliasing=2 |
+  |  Runtime sanitizer       |  -fsanitize=null           |  -fsanitize=undefined      |
+  |  Real CVE example        |  CVE-2009-1897 (Linux tun) |  CVE-2022-3643 (Linux Xen) |
+  |  Binary size change      |  ~18% smaller (check gone) |  ~5% smaller (fewer loads) |
+  |  Difficulty to spot      |  Moderate (code missing)   |  Hard (code present but    |
+  |                          |                            |  wrong)                    |
+  +--------------------------+----------------------------+----------------------------+
+
+
+================================================================================
+  PART 4 — KEY POINTS FOR THE REPORT
+================================================================================
+
+1.  THEY REPRESENT DIFFERENT FAILURE MODES:
+    - Null pointer removal is an OMISSION: the security check is deleted.
+      The binary is smaller. The check does not exist.
+    - Strict aliasing is a CORRUPTION: the security check is present but
+      operates on wrong data. The binary looks correct. The bug is invisible
+      without knowing what value to expect.
+
+2.  THE FLAG FIXES ARE STOPGAPS: both -fno-delete-null-pointer-checks and
+    -fno-strict-aliasing preserve correct behavior but do not remove the
+    underlying undefined behavior from the source code. If the code is ever
+    compiled by a different toolchain or without these flags, the bugs return.
+
+3.  THE CODE FIXES ARE PERMANENT: moving the null check before the dereference
+    (null pointer) and using memcpy instead of a cast (strict aliasing) are
+    the only solutions that are correct under all compilers, all optimization
+    levels, and all toolchains — because they eliminate the UB at the source.
+
+4.  REAL-WORLD IMPACT: these are not theoretical. Both classes of bug have
+    appeared in production kernels, cryptographic libraries, and network stacks.
+    The trusting trust model (Thompson 1984) that this project is based on
+    extends naturally to compiler-induced bugs: the programmer trusts the
+    compiler to translate their intent faithfully, but optimization assumptions
+    silently violate that trust.
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

@@ -1,0 +1,605 @@
+================================================================================
+  CISB — VARIABLE LENGTH ARRAYS, alloca() & STACK PROTECTION
+  Full Explanation, Methodology, and Analysis
+================================================================================
+
+This document explains the three stack-related CISB (Compiler-Induced Security
+Bug) tests performed via the vuln_vla_tests.sh script. It covers:
+
+  Part 1 — The core vulnerability (VLA & alloca stack exhaustion)
+  Part 2 — The source files and what each one does
+  Part 3 — The shell script: what it runs and why
+  Part 4 — Detection and mitigation (flags)
+  Part 5 — The real fixes (code changes)
+  Part 6 — Assembly analysis: what to observe
+  Part 7 — Statistics and what we deduce from them
+  Part 8 — Extra test 1: Stack canary (-fstack-protector-all)
+  Part 9 — Extra test 2: _FORTIFY_SOURCE
+  Part 10 — Summary and conclusions
+
+
+================================================================================
+  PART 1 — THE CORE VULNERABILITY
+================================================================================
+
+The problem is UNBOUNDED STACK ALLOCATION.
+
+In C, there are two ways to allocate memory on the stack at runtime with a
+size that is not known at compile time:
+
+  1. Variable Length Arrays (VLAs):    char buffer[n];
+  2. alloca():                         char *buffer = alloca(n);
+
+Both grow the stack pointer (rsp on x86-64) by the value of 'n' at runtime.
+The danger arises because:
+
+  - The stack has a FIXED size (typically 8 MB on Linux).
+  - The operating system places a GUARD PAGE at the bottom of the stack: a
+    single page (4096 bytes) of unmapped memory that triggers a segmentation
+    fault if touched, preventing the stack from growing into other memory.
+  - When the stack grows normally (small increments), each new page is touched
+    in order, and if it reaches the guard page, the OS detects it.
+  - BUT: if a single allocation is very large (e.g. 8 GB), the stack pointer
+    jumps far past the guard page in ONE instruction (sub rsp, <huge value>),
+    landing in valid mapped memory BEYOND the guard page. This is called a
+    "STACK CLASH".
+
+The critical difference from heap allocation:
+
+  - malloc() returns NULL on failure. The programmer can check for this.
+  - A VLA or alloca() that is too large has NO FAILURE SIGNAL. There is no
+    return value to check. The stack pointer simply moves, and if it lands
+    past the guard page, memory corruption occurs silently.
+
+This is NOT the compiler removing a security check (like null pointer check
+removal or dead store elimination). It is a LANGUAGE-LEVEL vulnerability:
+the C language provides no mechanism to detect or prevent stack overflow
+from VLAs or alloca(). The compiler's role here is in DETECTION (warning
+flags) and MITIGATION (stack-clash protection), not as the cause of the bug.
+
+SECURITY IMPACT:
+  - Denial of service (crash / segfault)
+  - Stack clash: silent memory corruption if the guard page is skipped
+  - In the worst case, an attacker controlling 'n' can overwrite memory
+    beyond the stack, potentially achieving code execution
+
+
+================================================================================
+  PART 2 — THE SOURCE FILES
+================================================================================
+
+Six source files are used. Each demonstrates a different aspect of the problem
+or a different solution.
+
+  +-----------------+-----------------------------------------------------------+
+  | File            | Purpose                                                   |
+  +-----------------+-----------------------------------------------------------+
+  | vuln_vla.c      | Vulnerable: uses a VLA (char buffer[n]) where n comes     |
+  |                 | from user input. The touch_pages() function is marked     |
+  |                 | __attribute__((noinline)) to prevent the compiler from    |
+  |                 | optimizing away the allocation at -O2. Without this, the  |
+  |                 | compiler would detect that the buffer has no observable   |
+  |                 | effect and delete the entire allocation (dead code        |
+  |                 | elimination), hiding the vulnerability.                   |
+  +-----------------+-----------------------------------------------------------+
+  | vuln_alloca.c   | Vulnerable: identical logic but uses alloca(n) instead    |
+  |                 | of a VLA. Demonstrates that alloca() has exactly the      |
+  |                 | same danger as VLAs — both are unbounded stack growth     |
+  |                 | with no failure signal.                                   |
+  +-----------------+-----------------------------------------------------------+
+  | fixed_buffer.c  | Safe fix A: replaces the VLA with a FIXED-SIZE buffer     |
+  |                 | (char buffer[MAX_BUFFER] where MAX_BUFFER = 4096). An     |
+  |                 | explicit bounds check rejects any request larger than     |
+  |                 | MAX_BUFFER. The stack growth is now a compile-time        |
+  |                 | constant, bounded and predictable.                        |
+  +-----------------+-----------------------------------------------------------+
+  | fixed_malloc.c  | Safe fix B: replaces the VLA with a heap allocation       |
+  |                 | (malloc(n)). The key advantage is that malloc returns     |
+  |                 | NULL on failure, which can be checked. For an 8 GB        |
+  |                 | request, malloc returns NULL and the program prints an    |
+  |                 | error message instead of crashing.                        |
+  +-----------------+-----------------------------------------------------------+
+  | canary_test.c   | test 1: a classic stack buffer overflow (strcpy           |
+  |                 | into a 16-byte buffer with a 64-byte input). Used to      |
+  |                 | demonstrate the -fstack-protector-all flag, which places  |
+  |                 | a "canary" value on the stack that detects corruption.    |
+  |                 |canary is basicly a waring telling that is it not possible.|
+  +-----------------+-----------------------------------------------------------+
+  | fortify_test.c  | test 2: the same strcpy overflow, but used to             |
+  |                 | demonstrate _FORTIFY_SOURCE, which replaces strcpy with   |
+  |                 | a bounds-checked version (__strcpy_chk) at compile time.  |
+  +-----------------+-----------------------------------------------------------+
+
+  WHY THE noinline TRICK IS NECESSARY (vuln_vla.c and vuln_alloca.c):
+
+  At -O2, the compiler aggressively eliminates dead code. If the buffer is
+  only used for a memset and a single byte read, the optimizer can prove that
+  the entire allocation has no observable side effect and remove it. This is
+  itself a CISB (dead code elimination), but it hides the VLA vulnerability
+  we want to demonstrate.
+
+  The touch_pages() function is marked noinline, meaning the compiler CANNOT
+  see inside it during optimization of process(). It must assume that
+  touch_pages() could read or write anything through the pointer it receives.
+  This forces the compiler to actually emit the VLA allocation (sub rsp, n)
+  and pass a real pointer.
+
+  The function also walks every 4096-byte page of the buffer, which ensures
+  that for huge allocations, the program actually touches unmapped memory
+  and triggers the expected segfault. Without page-walking, the OS might
+  not actually map the pages (demand paging), and the crash might not occur
+  predictably.
+
+
+================================================================================
+  PART 3 — THE SHELL SCRIPT: WHAT IT RUNS AND WHY
+================================================================================
+
+  STEP 1 — COMPILATION (automatic, no pause)
+  -------------------------------------------
+  Compiles all versions from the six source files:
+
+    vla_vuln        — vuln_vla.c at -O2 (vulnerable, VLA)
+    alloca_vuln     — vuln_alloca.c at -O2 (vulnerable, alloca)
+    vla_warned      — vuln_vla.c at -O2 -Wvla (detection only)
+    vla_clash       — vuln_vla.c at -O2 -fstack-clash-protection (mitigation)
+    alloca_clash    — vuln_alloca.c at -O2 -fstack-clash-protection
+    fixed_buf       — fixed_buffer.c at -O2 (safe code fix A)
+    fixed_malloc    — fixed_malloc.c at -O2 (safe code fix B)
+    vla_vuln_O0     — vuln_vla.c at -O0 (unoptimized, for comparison)
+
+  STEP 2 — RUN ALL VERSIONS (after first ENTER)
+  -----------------------------------------------
+  Each binary is run twice: once with a SMALL allocation (64 bytes, safe)
+  and once with a BIG allocation (8,000,000,000,000,000 bytes, crashes).
+
+  Expected results:
+
+    vla_vuln 64          → runs normally, exit code 0
+    vla_vuln BIG         → Segmentation fault, exit code 139
+    alloca_vuln 64       → runs normally, exit code 0
+    alloca_vuln BIG      → Segmentation fault, exit code 139
+    vla_clash 64         → runs normally, exit code 0
+    vla_clash BIG        → crash at guard page (controlled), exit code 139
+    fixed_buf 64         → runs normally, exit code 0
+    fixed_buf BIG        → prints "exceeds limit - rejected", exit code 0
+    fixed_malloc 64      → runs normally, exit code 0
+    fixed_malloc BIG     → prints "allocation failed - rejected", exit code 0
+
+  The key observation: ONLY the code-fixed versions (fixed_buf, fixed_malloc)
+  return exit code 0 for the huge allocation. Everything else crashes. The
+  stack-clash-protected version also crashes, but in a controlled way (it
+  hits the guard page reliably instead of potentially skipping it).
+
+
+  STEP 3 — -Wvla DETECTION (after second ENTER)
+  -----------------------------------------------
+  Runs vla_warned (compiled with -Wvla) with the same small and big inputs.
+  Then uses 'cmp' to compare vla_vuln and vla_warned byte-for-byte.
+
+  Expected: the binaries are IDENTICAL. The -Wvla flag is a compile-time
+  diagnostic only — it prints a warning during compilation but does not
+  change the generated code in any way. The vla_warned binary crashes
+  exactly like vla_vuln.
+
+
+  STEP 4 — ASSEMBLY ANALYSIS (after third ENTER)
+  ------------------------------------------------
+  Generates three assembly files and uses grep to find the key instructions.
+  See Part 6 for detailed explanation of what to observe.
+
+
+  STEP 5 — STATISTICS + EXTRA TESTS (after fourth ENTER)
+  -------------------------------------------------------
+  Collects binary sizes, instruction counts, and exit codes, then runs
+  the stack canary and _FORTIFY_SOURCE demonstrations.
+  See Parts 7, 8, and 9 for detailed analysis.
+
+
+================================================================================
+  PART 4 — DETECTION AND MITIGATION (FLAGS)
+================================================================================
+
+  FLAG 1: -Wvla  (DETECTION)
+  --------------------------
+
+  What it does:
+      At compile time, GCC and Clang emit a warning wherever a Variable
+      Length Array is used. Example output:
+
+          vuln_vla.c: In function 'process':
+          vuln_vla.c:17:9: warning: variable length array 'buffer' [-Wvla]
+
+  What it does NOT do:
+      It does NOT change the generated binary in any way. The compiled code
+      is byte-identical with or without -Wvla. The VLA is still present in
+      the binary, the stack still grows by a runtime amount, and the program
+      still crashes on a huge input.
+
+  FLAG 2: -fstack-clash-protection  (MITIGATION)
+  -----------------------------------------------
+
+  What it does:
+      When the compiler needs to grow the stack by a runtime-variable amount,
+      instead of emitting a single 'sub rsp, <large value>' instruction, it
+      emits a PROBING LOOP that:
+        1. Subtracts one page (4096 bytes) from rsp.
+        2. Writes a zero to that page (the "probe").
+        3. Repeats until the full allocation is reached.
+
+      This ensures that every page between the current stack and the target
+      is touched in order. If the allocation is large enough to reach the
+      guard page, the probe will RELIABLY hit it — the guard page cannot be
+      skipped.
+
+  What it does NOT do:
+      It does not PREVENT the crash. A huge allocation still fails. The
+      difference is HOW it fails:
+        - Without protection: the stack pointer jumps past the guard page,
+          potentially landing in valid memory. Silent corruption.
+        - With protection: every page is probed, the guard page is hit
+          reliably, and the OS delivers a clean SIGSEGV. No silent corruption.
+
+================================================================================
+  PART 5 — THE REAL FIXES (CODE CHANGES)
+================================================================================
+
+  FIX A — FIXED-SIZE BUFFER (fixed_buffer.c)
+  -------------------------------------------
+
+  The VLA  char buffer[n]  is replaced with  char buffer[MAX_BUFFER]  where
+  MAX_BUFFER is a compile-time constant (4096 in our test). An explicit
+  bounds check rejects any request where n > MAX_BUFFER.
+
+  Why this works:
+      The stack growth is now a CONSTANT known at compile time. The compiler
+      emits 'sub rsp, 0x1010' (a fixed value), not 'sub rsp, rax' (a
+      register). The stack never grows by more than MAX_BUFFER bytes
+      regardless of user input. There is no possibility of skipping the
+      guard page because the growth is bounded and small.
+
+  FIX B — HEAP ALLOCATION WITH NULL CHECK (fixed_malloc.c)
+  --------------------------------------------------------
+
+  The VLA is replaced with  char *buffer = malloc(n)  followed by a check:
+  if (buffer == NULL), reject the request.
+
+  Why this works:
+      malloc() allocates on the HEAP, not the stack. The heap has a proper
+      failure-reporting mechanism: it returns NULL when the allocation cannot
+      be satisfied. The programmer can check for NULL and handle the failure
+      gracefully (print an error, return an error code, etc.).
+
+      When n = 8,000,000,000,000,000, malloc returns NULL because the system
+      does not have 8 petabytes of memory. The program prints "allocation
+      failed - rejected" and exits cleanly with code 0.
+
+  When to use:
+      When the allocation size genuinely needs to vary at runtime and no
+      reasonable upper bound exists. This is the general-purpose safe
+      alternative to VLAs and alloca().
+
+  IMPORTANT DISTINCTION:
+      The stack has NO allocation failure signal. malloc has one (NULL).
+      This is the fundamental reason VLAs and alloca() are dangerous:
+      there is no way to detect or handle failure.
+
+================================================================================
+  PART 6 — ASSEMBLY ANALYSIS: WHAT TO OBSERVE
+================================================================================
+
+  Three assembly files are generated by the script:
+
+    asm_vla.s           — vuln_vla.c at -O2 (vulnerable)
+    asm_vla_clash.s     — vuln_vla.c at -O2 -fstack-clash-protection
+    asm_fixed_buf.s     — fixed_buffer.c at -O2 (safe code fix)
+
+  IN asm_vla.s (VULNERABLE):
+
+  Look for the stack adjustment in the process() function. It will contain
+  an instruction like:
+
+      sub    rsp, rax          (or sub rsp, rdx, depending on register allocation)
+
+  The script searches for this with:
+      grep -nE 'sub[lq]?[[:space:]]+%r[a-z0-9]+,[[:space:]]*%rsp' asm_vla.s
+
+  A match proves: the stack growth is VARIABLE and UNBOUNDED.
+
+
+  IN asm_vla_clash.s (STACK-CLASH PROTECTED):
+
+  The single 'sub rsp, rax' is replaced by a PROBING LOOP. Look for:
+
+      sub    rsp, 4096         (or sub rsp, $0x1000)
+      or     QWORD PTR [rsp], 0x0    (the probe: touches the new page)
+      cmp    rsp, <target>
+      jne    <loop label>
+
+  This loop subtracts one page at a time and probes each page before
+  continuing. The guard page is guaranteed to be hit if the allocation
+  crosses it.
+
+  The script searches for:
+      grep -nE '\$4096|0x1000' asm_vla_clash.s       (the per-page subtract)
+      grep -nE 'or[lq]?.*\$0,.*\(%rsp\)' asm_vla_clash.s   (the probe)
+
+  Matches prove: the compiler inserted page-by-page probing as a mitigation.
+
+
+  IN asm_fixed_buf.s (FIXED BUFFER):
+
+  The stack adjustment is a CONSTANT:
+
+      sub    rsp, 0x1010       (or similar fixed value: MAX_BUFFER + frame)
+
+  There is no register involved. The growth is known at compile time and
+  bounded. No amount of user input can change how much the stack grows.
+
+  The script searches for:
+      grep -nE 'sub[lq]?[[:space:]]+\$[0-9]+,[[:space:]]*%rsp' asm_fixed_buf.s
+
+  A match proves: the stack growth is CONSTANT and BOUNDED.
+
+
+  SUMMARY OF ASSEMBLY DIFFERENCES:
+
+  +--------------------+-----------------------------+-------------------------+
+  | Version            | Stack adjustment            | Safety                  |
+  +--------------------+-----------------------------+-------------------------+
+  | asm_vla.s          | sub rsp, <register>         | Unbounded, no probing   |
+  |                    | (single instruction)        | Guard page can be       |
+  |                    |                             | skipped                 |
+  +--------------------+-----------------------------+-------------------------+
+  | asm_vla_clash.s    | loop: sub rsp, 4096         | Unbounded, but probed   |
+  |                    |       probe [rsp]           | Guard page is reliably  |
+  |                    |       cmp/jne loop          | hit                     |
+  +--------------------+-----------------------------+-------------------------+
+  | asm_fixed_buf.s    | sub rsp, <constant>         | Bounded, compile-time   |
+  |                    | (single instruction, fixed) | known. Cannot skip      |
+  |                    |                             | guard page              |
+  +--------------------+-----------------------------+-------------------------+
+
+
+================================================================================
+  PART 7 — STATISTICS AND WHAT WE DEDUCE FROM THEM
+================================================================================
+
+The script collects three categories of statistics:
+
+  (a) BINARY SIZES — via the 'size' command
+  (b) INSTRUCTION COUNTS — via objdump + grep for the process() function
+  (c) EXIT CODES — running each binary with the BIG input
+
+
+  (a) BINARY SIZES
+  -----------------
+  The 'size' command reports ELF section sizes: text (code), data, bss.
+
+  Expected pattern:
+
+    vla_vuln      — smallest text section. No probing loop, no bounds check.
+    vla_clash     — slightly LARGER than vla_vuln. The probing loop adds
+                    extra instructions (the sub/probe/cmp/jne sequence).
+    alloca_vuln   — similar to vla_vuln. alloca() compiles to essentially
+                    the same 'sub rsp, rax' as a VLA.
+    fixed_buf     — slightly larger than vla_vuln. The bounds check
+                    (if n > MAX_BUFFER) and the fixed allocation add a
+                    small amount of code.
+    fixed_malloc  — slightly larger. The malloc call, NULL check, and free
+                    call add instructions compared to a raw VLA.
+
+  What this tells us:
+      The vulnerable version is the SMALLEST because it does the least work:
+      no checking, no probing, no failure handling. Every safety mechanism
+      (probing, bounds checks, NULL checks) adds code. The cost is small
+      (typically tens of bytes) but measurable. This is the classic
+      security-vs-performance trade-off: the unsafe version is marginally
+      smaller and faster, but the safe versions add trivial overhead in
+      exchange for preventing crashes and corruption.
+
+
+  (b) INSTRUCTION COUNTS FOR process()
+  -------------------------------------
+  The objdump command extracts the process() function from each binary and
+  counts the number of assembly instructions.
+
+  Expected pattern:
+
+    vla_vuln      — fewest instructions. The function is: adjust rsp by a
+                    register, call touch_pages, call printf, restore rsp.
+    vla_clash     — MORE instructions. The probing loop replaces the single
+                    'sub rsp, rax' with a multi-instruction loop (sub, probe,
+                    compare, jump). This is typically 5-10 extra instructions.
+    fixed_buf     — similar instruction count to vla_clash, but for a
+                    different reason: the bounds check (cmp, jump to error
+                    path, fprintf call) adds instructions.
+    fixed_malloc  — typically the most instructions: malloc call, NULL check,
+                    conditional jump, memset, printf, free.
+
+  What this tells us:
+      The instruction count directly reflects the cost of each safety
+      mechanism. The probing loop (vla_clash) and the bounds check (fixed_buf)
+      add a comparable number of instructions. The malloc version adds the
+      most because it involves a function call (malloc), a return-value check,
+      and a cleanup call (free).
+
+
+  (c) EXIT CODES ON BIG INPUT
+  ----------------------------
+  Each binary is run with 8,000,000,000,000,000 bytes and the exit code is
+  captured.
+
+  Expected results:
+
+    vla_vuln      — exit code 139 (SIGSEGV). The stack pointer jumps past
+                    the guard page or hits unmapped memory. Uncontrolled crash.
+    vla_clash     — exit code 139 (SIGSEGV). The probing loop reliably hits
+                    the guard page. Controlled crash. (Same exit code, but the
+                    MECHANISM is different — see assembly analysis.)
+    fixed_buf     — exit code 0. The bounds check rejects the request with
+                    an error message. No crash.
+    fixed_malloc  — exit code 0. malloc returns NULL, the program prints
+                    "allocation failed", and exits cleanly.
+
+  WHAT THE EXIT CODES TELL US:
+
+  Exit code 139 = 128 + 11. Signal 11 is SIGSEGV (segmentation fault).
+  Exit code 134 = 128 + 6.  Signal 6 is SIGABRT (abort, used by protections).
+  Exit code 0   = clean return.
+
+ This is a THREE-TIER model:
+
+      Tier 1 — DETECTION    (-Wvla)                    → find the problem
+      Tier 2 — MITIGATION   (-fstack-clash-protection)  → fail safely
+      Tier 3 — ELIMINATION  (code fix)                  → prevent the problem
+
+
+================================================================================
+  PART 8 — TEST 1: STACK CANARY (-fstack-protector-all)
+================================================================================
+
+  WHAT IT IS:
+
+  A stack canary (also called a "stack cookie" or "stack guard") is a random
+  value placed on the stack between local variables and the return address.
+  Before the function returns, the compiler inserts code to check whether the
+  canary value has been modified. If it has, a buffer overflow has occurred,
+  and the program aborts with "*** stack smashing detected ***".
+
+  THE TEST:
+
+  canary_test.c contains a 16-byte buffer and uses strcpy to copy user input
+  into it. When the input is longer than 15 characters (plus null terminator),
+  strcpy writes past the buffer, overwriting the canary and potentially the
+  return address.
+
+  Both receive a 64-character input (AAAA...A, 64 times), which overflows
+  the 16-byte buffer.
+
+  ISOLATION: Both builds also use -D_FORTIFY_SOURCE=0 to disable fortify
+  protection, ensuring that any detection is attributed ONLY to the canary.
+
+  WHAT THIS DEMONSTRATES:
+  The canary does NOT prevent the overflow. The buffer is still overwritten.
+  But it DETECTS the overflow before the function returns, preventing the
+  attacker from hijacking control flow via the corrupted return address. It
+  converts a silent, exploitable vulnerability into a loud, detected abort.
+
+
+================================================================================
+  PART 9 — TEST 2: _FORTIFY_SOURCE
+================================================================================
+
+  WHAT IT IS:
+
+  When compiled with -D_FORTIFY_SOURCE=2 and -O2, the compiler replaces
+  standard C library functions (strcpy, memcpy, sprintf, etc.) with
+  bounds-checked versions. For example:
+
+    strcpy(buf, input)  →  __strcpy_chk(buf, input, sizeof(buf))
+
+  The checked version knows the compile-time size of the destination buffer.
+  If the source string is longer than the destination, __strcpy_chk aborts
+  the program with:
+      *** buffer overflow detected ***: terminated
+
+  THE TEST:
+
+  fortify_test.c has the same 16-byte buffer and strcpy pattern.
+
+  Two binaries are compiled:
+    fortify_off — compiled with -D_FORTIFY_SOURCE=0 (no fortification)
+    fortify_on  — compiled with -D_FORTIFY_SOURCE=2 (full fortification)
+
+  Both receive a 64-character input.
+
+  ISOLATION: Both builds also use -fno-stack-protector to disable the canary,
+  ensuring that any detection is attributed ONLY to _FORTIFY_SOURCE.
+
+  HOW IT DIFFERS FROM THE CANARY:
+
+    Canary:          detects overflow AFTER it happens (before return).
+    _FORTIFY_SOURCE: detects overflow AT THE POINT OF THE COPY (before the overflow occurs). 
+                     The buffer is never actually overwritten past its bounds.
+
+  _FORTIFY_SOURCE is strictly stronger for the functions it covers (strcpy,
+  memcpy, sprintf, etc.), because it prevents the overflow entirely rather
+  than detecting it after the fact. However, it only works for library
+  functions whose destination size the compiler can determine at compile time.
+  The canary protects against ALL stack buffer overflows, including those from
+  hand-written loops or functions _FORTIFY_SOURCE cannot instrument.
+
+
+================================================================================
+  PART 10 — SUMMARY AND CONCLUSIONS
+================================================================================
+
+  THE THREE VULNERABILITIES TESTED:
+
+  1. VLA / alloca stack exhaustion:
+     An attacker-controlled size causes unbounded stack growth. No failure
+     signal exists. The stack pointer can skip the guard page.
+
+  2. Stack buffer overflow (canary test):
+     An attacker-controlled input overflows a fixed-size buffer on the stack,
+     corrupting the return address and enabling control-flow hijacking.
+
+  3. Stack buffer overflow (fortify test):
+     The same overflow, but targeting library functions (strcpy) that can be
+     replaced with bounds-checked versions by the compiler.
+
+
+  THE PROTECTION LANDSCAPE:
+
+  +-----------------------------+-------------+-------------+------------------+
+  | Mechanism                   | Type        | Prevents    | Detects          |
+  |                             |             | the bug?    | the bug?         |
+  +-----------------------------+-------------+-------------+------------------+
+  | -Wvla                       | Detection   | NO          | YES (compile)    |
+  | -fstack-clash-protection    | Mitigation  | NO          | YES (reliable    |
+  |                             |             |             | crash at guard)  |
+  | Fixed buffer / malloc       | Elimination | YES         | YES (graceful)   |
+  | -fstack-protector-all       | Detection   | NO          | YES (runtime)    |
+  | -D_FORTIFY_SOURCE=2         | Prevention  | YES (for    | YES (runtime)    |
+  |                             |             | covered     |                  |
+  |                             |             | functions)  |                  |
+  +-----------------------------+-------------+-------------+------------------+
+
+  KEY CONCLUSIONS FOR THE REPORT:
+
+  1. The C language provides NO mechanism to detect stack allocation failure.
+     This is the root cause of VLA/alloca vulnerabilities. The fix must come
+     either from the compiler (flags) or the programmer (code changes).
+
+  2. Compiler flags exist on a spectrum from detection to mitigation to
+     prevention. -Wvla only warns. -fstack-clash-protection ensures a
+     controlled crash. _FORTIFY_SOURCE actively prevents certain overflows.
+     No single flag eliminates all stack-related vulnerabilities.
+
+  3. Only CODE CHANGES fully eliminate the problem. Replacing VLAs with
+     fixed buffers or malloc removes the unbounded-growth vulnerability at
+     the source. This is consistent with the other CISBs studied (null
+     pointer check removal, strict aliasing): the compiler flag is a
+     stopgap; the code fix is the permanent solution.
+
+  4. Stack canaries and _FORTIFY_SOURCE are COMPLEMENTARY, not redundant.
+     Canaries detect all stack overflows after the fact. _FORTIFY_SOURCE
+     prevents overflows in specific library functions before they occur.
+     Using both provides defense in depth.
+
+  5. The relationship to the "Trusting Trust" framework (Thompson, 1984):
+     The programmer trusts the compiler to handle stack allocation safely,
+     but the C language specification provides no safety guarantees for
+     dynamic stack allocation. The compiler faithfully implements what the
+     standard permits — including silent, unchecked stack growth. The trust
+     is misplaced not in a malicious compiler, but in a language design that
+     prioritizes performance over safety. The compiler flags and code fixes
+     studied here represent the evolution of that trust relationship: from
+     blind trust (VLAs with no checks) to verified safety (bounded
+     allocation with explicit failure handling).
+
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

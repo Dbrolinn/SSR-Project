@@ -1,0 +1,77 @@
+The problem: Two sticky notes pointing to the same drawer
+Now imagine you have two sticky notes pointing to the same drawer:
+
+Sticky note A says: "This drawer contains a BIG number (like 1000)"
+Sticky note B says: "This drawer contains a SMALL number (like 64)"
+
+Both sticky notes point to the same physical drawer, but the labels describe the contents differently.
+
+What our vulnerable code does
+cint storage;                          // One drawer
+int *as_int = &storage;               // Sticky note A: "big number"
+short *as_short = (short *)&storage;  // Sticky note B: "small number"
+
+*as_int = 1000;        // Write 1000 using sticky note A
+*as_short = 64;        // Change it to 64 using sticky note B
+if (*as_int > 64)      // Read using sticky note A again
+What we expect:
+
+Put 1000 in the drawer (using note A)
+Change it to 64 (using note B)
+Check if the drawer contains more than 64 → should say NO
+
+What actually happens at high optimization levels:
+The compiler says: "Wait, sticky note A and sticky note B have different labels, so they MUST point to different drawers. I'll remember that note A says 1000 and skip re-reading the drawer."
+So step 3 checks the remembered value (1000) instead of the actual value in the drawer (64).
+
+Why does the compiler do this?
+The compiler is trying to make your program faster. Reading from memory (opening the drawer) is slow. If the compiler "knows" that nobody else touched the drawer, it can just remember the old value and skip the slow read.
+The rule is: "Different types of sticky notes never point to the same drawer."
+At -O0 (no optimization): The compiler is careful. It always opens the drawer and checks.
+At -O2 (optimized): The compiler says "I'm allowed to assume note A and note B point to different places. I'll remember the 1000 and not re-read."
+
+Why this is a security problem
+Imagine this drawer contains the size of a network packet arriving from the internet. The program needs to check: "Is this packet size safe?"
+1. Read the packet size → 1000 bytes
+2. Convert the size for the network format → becomes 64 bytes
+3. CHECK: Is it bigger than 64?
+   → Compiler uses the OLD value (1000) → YES, reject it
+   BUT the REAL value in memory is 64 → should have accepted it
+An attacker can send a packet where:
+
+The raw bytes look like 1000 (gets rejected)
+But after the conversion, it's actually 64 (should be accepted)
+
+The compiler's optimization makes the security check look at the wrong number, so the check passes when it shouldn't, or fails when it shouldn't.
+
+The real-world consequence
+This exact pattern appears in:
+
+Network packet parsers (checking packet lengths before copying data)
+File format readers (checking image dimensions before allocating memory)
+Video/audio decoders (checking frame sizes)
+
+If the security check uses a stale/wrong value, an attacker can send:
+
+A packet that looks small to the check
+But is actually huge after processing
+The program then copies MORE DATA than it allocated space for
+This overwrites other memory → crash, or worse, the attacker gains control
+
+
+The fix
+Don't use two different types of sticky notes for the same drawer.
+Instead of:
+cint *note_A = &drawer;
+short *note_B = (short *)&drawer;  // BAD: confuses the compiler
+Do this:
+cint drawer;
+short temp = 64;
+memcpy(&drawer, &temp, sizeof(short));  // SAFE: explicit copy
+memcpy is like saying to the compiler: "I'm moving data between drawers the official way, don't make assumptions."
+
+What our experiment shows
+We compile the SAME CODE with different optimization levels:
+OptimizationWhat the check seesOutcome-O0 (no optimization)Reads the drawer → sees 64✓ Correct-O1 (light optimization)Reads the drawer → sees 64✓ Correct-O2 (full optimization)Uses remembered 1000✗ WRONG-O3 (aggressive)Uses remembered 1000✗ WRONG
+Same source code, different result depending on compiler settings. That's the bug. The compiler's speed optimization breaks security.
+Your table with 100 runs per cell proves this happens every single time at -O2/-O3 (100/100), and never at -O0/-O1 (0/100) — it's completely predictable once you know the optimization level.

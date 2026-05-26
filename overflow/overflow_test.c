@@ -65,6 +65,15 @@ NOINLINE bool check(test_type x, offset_type offset) {
     return __builtin_add_overflow(x, offset, &result);
 #endif
 }
+
+#elif defined(MODEL_SHIFT_UB)
+NOINLINE bool check(test_type x, offset_type offset) {
+#if defined(TYPE_POINTER) || defined(TYPE_DOUBLE)
+    return false;
+#else
+    return ((1 << offset) == 0);
+#endif
+}
 #endif
 
 // =====================================================================
@@ -106,6 +115,10 @@ int main(int argc, char *argv[]) {
     x = TYPE_MAX;
     offset = raw_offset * 10;
     actual_overflow = true;
+#elif defined(MODEL_SHIFT_UB)
+    x = 1;
+    offset = (raw_offset > 0) ? 32 : 15;
+    actual_overflow = (offset >= 32); 
 #else
     x = INT_MAX;
     offset = raw_offset;

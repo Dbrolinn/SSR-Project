@@ -35,6 +35,19 @@ Naive (w/ Buffer) & clang & \texttt{-O2} & 16104 & \textbf{\textcolor{red}{Vulne
 Naive (w/ Buffer) & clang & \texttt{-O3} & 16104 & \textbf{\textcolor{red}{Vulnerable}} \\
 Naive (w/ Buffer) & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
 \midrule
+Left Shift (Ext4) & gcc & \texttt{-O0 (Def)} & 16088 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & gcc & \texttt{-O0} & 16088 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & gcc & \texttt{-O1} & 16096 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & gcc & \texttt{-O2} & 16096 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & gcc & \texttt{-O3} & 16096 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & gcc & \texttt{-O3 -fwrapv} & 16096 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & clang & \texttt{-O0 (Def)} & 16104 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & clang & \texttt{-O0} & 16104 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & clang & \texttt{-O1} & 16104 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & clang & \texttt{-O2} & 16104 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & clang & \texttt{-O3} & 16104 & \textbf{\textcolor{red}{Vulnerable}} \\
+Left Shift (Ext4) & clang & \texttt{-O3 -fwrapv} & 16104 & \textbf{\textcolor{red}{Vulnerable}} \\
+\midrule
 Pre-condition & gcc & \texttt{-O0 (Def)} & 16144 & \textcolor{green}{Secure}} \\
 Pre-condition & gcc & \texttt{-O0} & 16144 & \textcolor{green}{Secure}} \\
 Pre-condition & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
@@ -96,18 +109,18 @@ unsigned int & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
 unsigned int & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
 unsigned int & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
 \midrule
-int16_t & gcc & \texttt{-O0 (Def)} & 16088 & \textcolor{green}{Secure}} \\
-int16_t & gcc & \texttt{-O0} & 16088 & \textcolor{green}{Secure}} \\
-int16_t & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
-int16_t & gcc & \texttt{-O2} & 16096 & \textcolor{green}{Secure}} \\
-int16_t & gcc & \texttt{-O3} & 16096 & \textcolor{green}{Secure}} \\
-int16_t & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{green}{Secure}} \\
-int16_t & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{green}{Secure}} \\
-int16_t & clang & \texttt{-O0} & 16104 & \textcolor{green}{Secure}} \\
-int16_t & clang & \texttt{-O1} & 16104 & \textcolor{green}{Secure}} \\
-int16_t & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
-int16_t & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
-int16_t & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
+int16\_t & gcc & \texttt{-O0 (Def)} & 16088 & \textcolor{green}{Secure}} \\
+int16\_t & gcc & \texttt{-O0} & 16088 & \textcolor{green}{Secure}} \\
+int16\_t & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
+int16\_t & gcc & \texttt{-O2} & 16096 & \textcolor{green}{Secure}} \\
+int16\_t & gcc & \texttt{-O3} & 16096 & \textcolor{green}{Secure}} \\
+int16\_t & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{green}{Secure}} \\
+int16\_t & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{green}{Secure}} \\
+int16\_t & clang & \texttt{-O0} & 16104 & \textcolor{green}{Secure}} \\
+int16\_t & clang & \texttt{-O1} & 16104 & \textcolor{green}{Secure}} \\
+int16\_t & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
+int16\_t & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
+int16\_t & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
 \midrule
 double & gcc & \texttt{-O0 (Def)} & 16088 & \textcolor{green}{Secure}} \\
 double & gcc & \texttt{-O0} & 16088 & \textcolor{green}{Secure}} \\

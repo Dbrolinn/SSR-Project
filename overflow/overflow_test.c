@@ -2,95 +2,117 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <time.h>
 #include <stdbool.h>
+#include <float.h>
 
-// Prevent the compiler from aggressively inlining functions into main.
-// This mimics real-world scenarios where functions live in different files.
 #define NOINLINE __attribute__((noinline))
 
-// 1. Original naive check without buffer
-NOINLINE bool check_overflow_nobuff(int x, int offset) {
+// =====================================================================
+// 1. Data Structures
+// =====================================================================
+#if defined(TYPE_INT16)
+    typedef int16_t test_type;
+    typedef int16_t offset_type;
+    #define TYPE_MAX SHRT_MAX
+#elif defined(TYPE_UINT)
+    typedef unsigned int test_type;
+    typedef unsigned int offset_type;
+    #define TYPE_MAX UINT_MAX
+#elif defined(TYPE_DOUBLE)
+    typedef double test_type;
+    typedef double offset_type;
+    #define TYPE_MAX DBL_MAX
+#elif defined(TYPE_POINTER)
+    typedef char* test_type;
+    typedef int offset_type;
+    #define TYPE_MAX ((char *)(uintptr_t) UINTPTR_MAX - 5)
+#else
+    typedef int test_type;
+    typedef int offset_type;
+    #define TYPE_MAX INT_MAX
+#endif
+
+// =====================================================================
+// 2. Test Functions
+// =====================================================================
+#if defined(MODEL_NAIVE)
+NOINLINE bool check(test_type x, offset_type offset) {
     return (x + offset < x);
 }
 
-// 2. Original naive check with buffer
-NOINLINE bool check_overflow_buff(int x, int offset) {
-    int buff = x + offset;
+#elif defined(MODEL_BUFFER)
+NOINLINE bool check(test_type x, offset_type offset) {
+    test_type buff = x + offset;
     return (buff < x);
 }
 
-// 3. The Pre-condition Check
-NOINLINE bool check_overflow_precondition(int x, int offset) {
-    if (offset > 0 && x > INT_MAX - offset) return true;
-    if (offset < 0 && x < INT_MIN - offset) return true;
+#elif defined(MODEL_SAFE)
+NOINLINE bool check(test_type x, offset_type offset) {
+#if defined(TYPE_POINTER) || defined(TYPE_DOUBLE)
     return false;
+#else
+    if (offset > 0 && x > TYPE_MAX - offset) return true;
+    return false;
+#endif
 }
 
-// 4. The Unsigned Cast Check
-NOINLINE bool check_overflow_unsigned(int x, int offset) {
-    return ((unsigned int)x + (unsigned int)offset < (unsigned int)x);
-}
-
-// 5. Compiler Intrinsic
-NOINLINE bool check_overflow_builtin(int x, int offset) {
-    int result;
+#elif defined(MODEL_BUILTIN)
+NOINLINE bool check(test_type x, offset_type offset) {
+#if defined(TYPE_POINTER) || defined(TYPE_DOUBLE)
+    return false;
+#else
+    test_type result;
     return __builtin_add_overflow(x, offset, &result);
+#endif
 }
-
-// 6. Pointer Arithmetic (Pointer overflow is also UB)
-NOINLINE bool check_pointer_overflow(char *base, int offset) {
-    return (base + offset < base);
-}
+#endif
 
 // =====================================================================
-// Evaluation Engine
+// 3. Evaluation Functions
 // =====================================================================
-void evaluate(const char* name, bool check_result, bool actual_overflow) {
-    printf("  %-38s \t", name);
-
+void evaluate(bool check_result, bool actual_overflow) {
     if (actual_overflow && !check_result) {
-        // The math overflowed, but the check missed it!
-        printf("[CISB DETECTED] (Compiler eliminated check)\n");
+        printf("CISB_DETECTED\n");
     }
     else if (!actual_overflow && check_result) {
-        // The math was fine, but the check triggered anyway!
-        printf("[LOGIC FLAW] (False Positive)\n");
+        printf("LOGIC_FLAW\n");
     }
     else {
-        // The check agreed with mathematical reality
-        printf("[CORRECT]\n");
+        printf("CORRECT\n");
     }
 }
 
-int main() {
-    srand(time(NULL));
+int main(int argc, char *argv[]) {
+    if (argc < 2) return 1;
+    int raw_offset = atoi(argv[1]);
 
-    int x = INT_MAX;
-    char *high_ptr = (char *)(uintptr_t) UINTPTR_MAX - 5;
+    bool actual_overflow = false;
+    test_type x;
+    offset_type offset;
 
-    //? Analysis of the offset value initialization
-    int lower_bound = -20;
-    int upper_bound = 20;
-    int offset = rand() % (upper_bound - lower_bound + 1) + lower_bound;
-    // int offset = 16;
-
-    int dummy_result;
-    bool actual_overflow = __builtin_add_overflow(x, offset, &dummy_result);
-
-    printf("======================================================================\n");
-    printf(" Testing x = %d, offset = %d\n", x, offset);
-    printf(" Ground Truth: Did it actually overflow? --> %s\n", actual_overflow ? "YES" : "NO");
-    printf("----------------------------------------------------------------------\n");
-
-    evaluate("[1] Naive (x + offset < x):", check_overflow_nobuff(x, offset), actual_overflow);
-    evaluate("[2] Naive with buffer:", check_overflow_buff(x, offset), actual_overflow);
-    evaluate("[3] Safe pre-condition:", check_overflow_precondition(x, offset), actual_overflow);
-    evaluate("[4] Unsigned cast wrap:", check_overflow_unsigned(x, offset), actual_overflow);
-    evaluate("[5] Compiler builtin:", check_overflow_builtin(x, offset), actual_overflow);
-    evaluate("[6] Pointer math:", check_pointer_overflow(high_ptr, offset), actual_overflow);
-
-    printf("======================================================================\n\n");
+#if defined(TYPE_INT16)
+    x = SHRT_MAX;
+    offset = (int16_t)raw_offset;
+    actual_overflow = false;
+#elif defined(TYPE_UINT)
+    x = UINT_MAX;
+    offset = (unsigned int)raw_offset;
+    actual_overflow = true;
+#elif defined(TYPE_DOUBLE)
+    x = DBL_MAX;
+    offset = (raw_offset > 0) ? DBL_MAX : 0.0;
+    actual_overflow = false;
+#elif defined(TYPE_POINTER)
+    x = TYPE_MAX;
+    offset = raw_offset * 10;
+    actual_overflow = true;
+#else
+    x = INT_MAX;
+    offset = raw_offset;
+    int dummy;
+    actual_overflow = __builtin_add_overflow(x, offset, &dummy);
+#endif
+    evaluate(check(x, offset), actual_overflow);
 
     return 0;
 }

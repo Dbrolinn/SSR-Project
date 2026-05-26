@@ -1,0 +1,138 @@
+% =========================================================
+% Resultados Extraídos Automaticamente do overflow_tester.sh
+% =========================================================
+
+\begin{table*}[htbp]
+\centering
+\caption{Performance and Security Trade-offs (Integer Bounds Check)}
+\begin{tabular}{@{}lllcrl@{}}
+\toprule
+\textbf{Model Strategy} & \textbf{Compiler} & \textbf{Flag} & \textbf{Size (B)} & \textbf{Status (Recall)} \
+\midrule
+Naive (Direct) & gcc & \texttt{-O0 (Def)} & 16144 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & gcc & \texttt{-O0} & 16144 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & gcc & \texttt{-O1} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & gcc & \texttt{-O2} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & gcc & \texttt{-O3} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & clang & \texttt{-O0} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & clang & \texttt{-O1} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & clang & \texttt{-O2} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & clang & \texttt{-O3} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (Direct) & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{orange}{Logic Flaw} \\
+\midrule
+Naive (w/ Buffer) & gcc & \texttt{-O0 (Def)} & 16144 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & gcc & \texttt{-O0} & 16144 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & gcc & \texttt{-O1} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & gcc & \texttt{-O2} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & gcc & \texttt{-O3} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & clang & \texttt{-O0} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & clang & \texttt{-O1} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & clang & \texttt{-O2} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & clang & \texttt{-O3} & 16104 & \textcolor{orange}{Logic Flaw} \\
+Naive (w/ Buffer) & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{orange}{Logic Flaw} \\
+\midrule
+Pre-condition & gcc & \texttt{-O0 (Def)} & 16144 & \textcolor{green}{Secure}} \\
+Pre-condition & gcc & \texttt{-O0} & 16144 & \textcolor{green}{Secure}} \\
+Pre-condition & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
+Pre-condition & gcc & \texttt{-O2} & 16096 & \textcolor{green}{Secure}} \\
+Pre-condition & gcc & \texttt{-O3} & 16096 & \textcolor{green}{Secure}} \\
+Pre-condition & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{green}{Secure}} \\
+Pre-condition & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{green}{Secure}} \\
+Pre-condition & clang & \texttt{-O0} & 16104 & \textcolor{green}{Secure}} \\
+Pre-condition & clang & \texttt{-O1} & 16104 & \textcolor{green}{Secure}} \\
+Pre-condition & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
+Pre-condition & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
+Pre-condition & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
+\midrule
+Builtin & gcc & \texttt{-O0 (Def)} & 16144 & \textcolor{green}{Secure}} \\
+Builtin & gcc & \texttt{-O0} & 16144 & \textcolor{green}{Secure}} \\
+Builtin & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
+Builtin & gcc & \texttt{-O2} & 16096 & \textcolor{green}{Secure}} \\
+Builtin & gcc & \texttt{-O3} & 16096 & \textcolor{green}{Secure}} \\
+Builtin & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{green}{Secure}} \\
+Builtin & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{green}{Secure}} \\
+Builtin & clang & \texttt{-O0} & 16104 & \textcolor{green}{Secure}} \\
+Builtin & clang & \texttt{-O1} & 16104 & \textcolor{green}{Secure}} \\
+Builtin & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
+Builtin & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
+Builtin & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
+\midrule
+\bottomrule \end{tabular} \end{table*}
+
+\begin{table*}[htbp]
+\centering
+\caption{Impact of C Standards on Bounds Check Elimination}
+\begin{tabular}{@{}lllcrl@{}}
+\toprule
+\textbf{Data Type} & \textbf{Compiler} & \textbf{Flag} & \textbf{Size (B)} & \textbf{Status (Recall)} \
+\midrule
+int (Signed) & gcc & \texttt{-O0 (Def)} & 16144 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & gcc & \texttt{-O0} & 16144 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & gcc & \texttt{-O1} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & gcc & \texttt{-O2} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & gcc & \texttt{-O3} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & clang & \texttt{-O0} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & clang & \texttt{-O1} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & clang & \texttt{-O2} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & clang & \texttt{-O3} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int (Signed) & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{orange}{Logic Flaw} \\
+\midrule
+unsigned int & gcc & \texttt{-O0 (Def)} & 16088 & \textcolor{green}{Secure}} \\
+unsigned int & gcc & \texttt{-O0} & 16088 & \textcolor{green}{Secure}} \\
+unsigned int & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
+unsigned int & gcc & \texttt{-O2} & 16096 & \textcolor{green}{Secure}} \\
+unsigned int & gcc & \texttt{-O3} & 16096 & \textcolor{green}{Secure}} \\
+unsigned int & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{green}{Secure}} \\
+unsigned int & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{green}{Secure}} \\
+unsigned int & clang & \texttt{-O0} & 16104 & \textcolor{green}{Secure}} \\
+unsigned int & clang & \texttt{-O1} & 16104 & \textcolor{green}{Secure}} \\
+unsigned int & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
+unsigned int & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
+unsigned int & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
+\midrule
+int16_t & gcc & \texttt{-O0 (Def)} & 16088 & \textcolor{orange}{Logic Flaw} \\
+int16_t & gcc & \texttt{-O0} & 16088 & \textcolor{orange}{Logic Flaw} \\
+int16_t & gcc & \texttt{-O1} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int16_t & gcc & \texttt{-O2} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int16_t & gcc & \texttt{-O3} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int16_t & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{orange}{Logic Flaw} \\
+int16_t & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int16_t & clang & \texttt{-O0} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int16_t & clang & \texttt{-O1} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int16_t & clang & \texttt{-O2} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int16_t & clang & \texttt{-O3} & 16104 & \textcolor{orange}{Logic Flaw} \\
+int16_t & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{orange}{Logic Flaw} \\
+\midrule
+double & gcc & \texttt{-O0 (Def)} & 16088 & \textcolor{green}{Secure}} \\
+double & gcc & \texttt{-O0} & 16088 & \textcolor{green}{Secure}} \\
+double & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
+double & gcc & \texttt{-O2} & 16096 & \textcolor{green}{Secure}} \\
+double & gcc & \texttt{-O3} & 16096 & \textcolor{green}{Secure}} \\
+double & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{green}{Secure}} \\
+double & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{green}{Secure}} \\
+double & clang & \texttt{-O0} & 16104 & \textcolor{green}{Secure}} \\
+double & clang & \texttt{-O1} & 16104 & \textcolor{green}{Secure}} \\
+double & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
+double & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
+double & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
+\midrule
+char* (Pointer) & gcc & \texttt{-O0 (Def)} & 16088 & \textcolor{green}{Secure}} \\
+char* (Pointer) & gcc & \texttt{-O0} & 16088 & \textcolor{green}{Secure}} \\
+char* (Pointer) & gcc & \texttt{-O1} & 16096 & \textcolor{green}{Secure}} \\
+char* (Pointer) & gcc & \texttt{-O2} & 16096 & \textcolor{green}{Secure}} \\
+char* (Pointer) & gcc & \texttt{-O3} & 16096 & \textcolor{green}{Secure}} \\
+char* (Pointer) & gcc & \texttt{-O3 -fwrapv} & 16096 & \textcolor{green}{Secure}} \\
+char* (Pointer) & clang & \texttt{-O0 (Def)} & 16104 & \textcolor{green}{Secure}} \\
+char* (Pointer) & clang & \texttt{-O0} & 16104 & \textcolor{green}{Secure}} \\
+char* (Pointer) & clang & \texttt{-O1} & 16104 & \textcolor{green}{Secure}} \\
+char* (Pointer) & clang & \texttt{-O2} & 16104 & \textcolor{green}{Secure}} \\
+char* (Pointer) & clang & \texttt{-O3} & 16104 & \textcolor{green}{Secure}} \\
+char* (Pointer) & clang & \texttt{-O3 -fwrapv} & 16104 & \textcolor{green}{Secure}} \\
+\midrule
+\bottomrule \end{tabular} \end{table*}

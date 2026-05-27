@@ -14,9 +14,9 @@ declare -a flags=(
     "-O3"
 )
 
-echo "##################################################"
+echo ""
 echo " Analisando Information Leak via Struct Padding "
-echo "##################################################"
+echo ""
 
 for flag in "${flags[@]}"; do
     echo ">>> Compilando com GCC: $flag"

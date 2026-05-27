@@ -1,6 +1,5 @@
-##########################################
 function: process_secret_insecure function
-##########################################
+
 compile: gcc 16.1 -O0 => result: [CORRECT]
 compile: gcc 16.1 -O2 => result: [CISB DETECTED]
 compile: gcc 16.1 -O3 => result: [CISB DETECTED]
@@ -79,9 +78,9 @@ compile: clang 22.1.0 -O3 -fno-builtin => result: [CORRECT]
         call    memset@PLT
 `
 
-##########################################
+
 function: process_secret_insecure function
-##########################################
+
 compile: gcc 16.1 -O0 => result: [CORRECT]
 compile: gcc 16.1 -O2 => result: [CORRECT]
 compile: gcc 16.1 -O3 => result: [CORRECT]
@@ -124,9 +123,9 @@ compile: clang 22.1.0 -O0 => result: [CORRECT]
 compile: clang 22.1.0 -O2 => result: [CORRECT]
 compile: clang 22.1.0 -O3 => result: [CORRECT]
 
-##########################################
+
 function: process_secret_barrier function
-##########################################
+
 compile: gcc 16.1 -O0 => result: [CORRECT]
 compile: gcc 16.1 -O2 => result: [CORRECT]
 compile: gcc 16.1 -O3 => result: [CORRECT]
@@ -136,9 +135,9 @@ compile: clang 22.1.0 -O0 => result: [CORRECT]
 compile: clang 22.1.0 -O2 => result: [CORRECT]
 compile: clang 22.1.0 -O3 => result: [CORRECT]
 
-##########################################
+
 function: process_secret_explicit function
-##########################################
+
 compile: gcc 16.1 -O0 => result: [CORRECT]
 compile: gcc 16.1 -O2 => result: [CORRECT]
 compile: gcc 16.1 -O3 => result: [CORRECT]

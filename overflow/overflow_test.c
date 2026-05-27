@@ -7,9 +7,8 @@
 
 #define NOINLINE __attribute__((noinline))
 
-// =====================================================================
-// 1. Data Structures
-// =====================================================================
+// Data Structures
+
 #if defined(TYPE_INT16)
     typedef int16_t test_type;
     typedef int16_t offset_type;
@@ -32,9 +31,8 @@
     #define TYPE_MAX INT_MAX
 #endif
 
-// =====================================================================
-// 2. Test Functions
-// =====================================================================
+// Test Functions
+
 #if defined(MODEL_NAIVE)
 NOINLINE bool check(test_type x, offset_type offset) {
     return (x + offset < x);
@@ -76,9 +74,8 @@ NOINLINE bool check(test_type x, offset_type offset) {
 }
 #endif
 
-// =====================================================================
-// 3. Evaluation Functions
-// =====================================================================
+// Evaluation Functions
+
 void evaluate(bool check_result, bool actual_overflow) {
     if (actual_overflow && !check_result) {
         printf("CISB_DETECTED\n");

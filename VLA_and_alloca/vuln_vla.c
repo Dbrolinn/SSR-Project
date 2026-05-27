@@ -3,8 +3,7 @@
 #include <string.h>
 
 /* noinline sink: the compiler cannot see through it, so it is forced to
-   allocate the VLA for real and touch every page. This prevents the
-   optimizer from deleting the allocation as dead code at -O2.            */
+   allocate the VLA for real and touch every page. */
 __attribute__((noinline))
 void touch_pages(volatile char *buf, unsigned long n) {
     for (unsigned long i = 0; i < n; i += 4096)

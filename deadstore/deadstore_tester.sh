@@ -38,9 +38,9 @@ run_compiler_suite() {
     mkdir -p "$bin_dir"
     mkdir -p "$asm_dir"
 
-    echo "##################################################"
+    echo ""
     echo " Generating Assembly with: $compiler"
-    echo "##################################################"
+    echo ""
 
     for flag in "${flags[@]}"; do
         local safe_flag_name=$(echo "$flag" | tr ' -' '__' | sed 's/^_//')
@@ -53,7 +53,7 @@ run_compiler_suite() {
         $compiler $flag "$SRC" -o "$bin_file" 2>/dev/null
         local compile_status=$?
 
-        # Gerar o Assembly (Intel syntax, sem tabelas de debug para facilitar a leitura humana)
+        # Gerar o Assembly 
         $compiler $flag -S -masm=intel -fno-asynchronous-unwind-tables "$SRC" -o "$asm_file" 2>/dev/null
         
         if [ $compile_status -eq 0 ]; then
@@ -82,8 +82,8 @@ else
     echo "Clang not found."
 fi
 
-echo "=================================================="
-echo " Compilation Pipeline Finished!"
+echo ""
+echo " Compilation Pipeline Finished"
 echo " Navigate to the $BASE_ASM_DIR/ directory and open"
-echo " the .s files in VSCode/Vim to verify the CISBs."
-echo "=================================================="
+echo " the .s files in VSCode or Vim to verify the CISBs."
+echo ""

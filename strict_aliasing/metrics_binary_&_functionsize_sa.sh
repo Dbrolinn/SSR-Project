@@ -3,9 +3,7 @@
 #
 #  For each (compiler, model, optimization level) it builds and runs the
 #  program 100 times, records how many runs exhibited the bug,
-#  computes the mean (mu) and standard deviation (sigma) of the bug rate,
-#  and records the binary size. Results are written to results_bug4.csv and
-#  printed as a LaTeX table fragment.
+#  and records the binary size. Results are written to results_bug4.csv.
 #
 #  Expects in this directory:
 #    vuln.c       -> model M=0
@@ -20,7 +18,7 @@ FUNC="validate"             # function name for assembly analysis
 CSV="results_bug4.csv"
 
 BYPASS_MARKER="stayed 1000"
-# (fixed.c never prints this
+# (fixed.c never prints this)
 
 # Discover available compilers
 COMPILERS=""
@@ -40,10 +38,7 @@ echo "Iterations per cell: $N"
 echo "Bug = run prints 'stayed 1000'"
 echo ""
 
-#   standard deviation of a list of 0/1 values given count of 1s
-#   We report sigma as the sample standard deviation of the 0/1 outcomes.
 stddev() {
-    # args: total_n  successes_k
     awk -v n="$1" -v k="$2" 'BEGIN{
         if (n<=1){ print "0.000"; exit }
         p = k/n;
@@ -56,7 +51,6 @@ stddev() {
     }'
 }
 
-# CSV header
 echo "compiler,model,opt,bug,iterations,bug_count,mu,sigma,size_bytes,mem_reads" > "$CSV"
 
 # experiment loops
@@ -112,7 +106,6 @@ echo "Raw results written to: $CSV"
 echo ""
 
 # LaTeX table fragment.
-# emit one row per (compiler, model, opt) so every cell is visible.
 LATEX="table_bug4.tex"
 {
     echo "% Columns: CC = compiler, M = model (0=vuln,1=fixed), O = opt level,"

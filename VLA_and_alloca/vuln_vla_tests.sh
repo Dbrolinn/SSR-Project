@@ -21,7 +21,6 @@ pause() {
 }
 
 run() {
-    # run "description" command args...
     local desc="$1"; shift
     echo "----------------------------------------------------------------"
     echo "  $desc"
@@ -130,7 +129,7 @@ if cmp -s vla_vuln vla_warned; then
     echo "   YES, vla_vuln and vla_warned are byte-identical."
 fi
 
-# ASSEMBLY code generation and grep used to prove and capture the lines
+# assembly code generation and grep used to prove and capture the lines
 pause
 echo ""
 echo " ASSEMBLY ANALYSIS"
@@ -160,7 +159,7 @@ echo "   A 'sub' of %rsp by a CONSTANT = bounded, compile-time-known growth."
 grep -nE 'sub[lq]?[[:space:]]+\$[0-9]+,[[:space:]]*%rsp' asm_fixed_buf.s \
     || echo "   (pattern not found -- open asm_fixed_buf.s and look for sub \$N,%rsp)"
 
-# STATISTICS + the two extra tests (canary, fortify)
+# statistics + the two extra tests (canary, fortify)
 pause
 echo ""
 echo " STATISTICS"

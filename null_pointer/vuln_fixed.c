@@ -9,18 +9,15 @@ void process_request(char *user_input) {
         return;
     }
 
-    /* DEREFERENCE HAPPENS FIRST — compiler now knows
-       user_input cannot be NULL (or it's UB).       */
-    char first = *user_input;     // ← triggers UB assumption
+    char first = *user_input;    
 
-    /* This runs even when user_input IS null at -O2 */
     char buf[256];
     strncpy(buf, user_input, sizeof(buf) - 1);
     printf("Processing: %s\n", buf);
 }
 
 int main(void) {
-    process_request("hello");   // fine
-    process_request(NULL);      // crashes or corrupts memory
+    process_request("hello");   
+    process_request(NULL);      
     return 0;
 }

@@ -31,7 +31,6 @@ overflow_double_nobuff(double x, double offset) {
     return (x + offset < x);
 }
 
-// ---
 
 NOINLINE bool 
 overflow_int_buff(int32_t x, int32_t offset) {
@@ -57,7 +56,6 @@ overflow_double_buff(double x, double offset) {
     return (b < x);
 }
 
-// --
 
 NOINLINE bool 
 overflow_int_prec(int32_t x, int32_t offset) {
@@ -71,35 +69,33 @@ overflow_int_prec(int32_t x, int32_t offset) {
 }
 
 
-// --
 
-// 5. Compiler Intrinsic
+// compiler intrinsic
 NOINLINE bool check_overflow_builtin(int x, int offset) {
     int result;
     return __builtin_add_overflow(x, offset, &result);
 }
 
-// 6. Pointer Arithmetic (Pointer overflow is also UB)
+// pointer arithmetic (Pointer overflow is also UB)
 NOINLINE bool check_pointer_overflow(char *base, int offset) {
     return (base + offset < base);
 }
 
-// =====================================================================
 // Evaluation Engine
-// =====================================================================
+
 void evaluate(const char* name, bool check_result, bool actual_overflow) {
     printf("  %-38s \t", name);
 
     if (actual_overflow && !check_result) {
-        // The math overflowed, but the check missed it!
+        // the math overflowed, but the check missed it
         printf("[CISB DETECTED] (Compiler eliminated check)\n");
     }
     else if (!actual_overflow && check_result) {
-        // The math was fine, but the check triggered anyway!
+        // the math was fine, but the check triggered anyway
         printf("[LOGIC FLAW] (False Positive)\n");
     }
     else {
-        // The check agreed with mathematical reality
+        // the check agreed with mathematical reality
         printf("[CORRECT]\n");
     }
 }
@@ -110,7 +106,7 @@ int main() {
     int x = INT_MAX;
     char *high_ptr = (char *)(uintptr_t) UINTPTR_MAX - 5;
 
-    //? Analysis of the offset value initialization
+    // analysis of the offset value initialization
     int lower_bound = -20;
     int upper_bound = 20;
     int offset = rand() % (upper_bound - lower_bound + 1) + lower_bound;

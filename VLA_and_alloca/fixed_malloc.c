@@ -3,7 +3,7 @@
 #include <string.h>
 
 void process(unsigned long n) {
-    char *buffer = (char *) malloc(n); /* heap: returns NULL on failure */
+    char *buffer = (char *) malloc(n); /* returns NULL on failure */
     if (buffer == NULL) {
         fprintf(stderr, "[malloc] allocation of %lu bytes failed - rejected\n", n);
         return;

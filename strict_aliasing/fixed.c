@@ -5,12 +5,11 @@
 #define MAX_LEN 64
 
 /* FIXED: no type punning. We use memcpy to move bytes between the two
-   views, so the compiler cannot assume non-aliasing — the result is
-   always correct regardless of optimization level. */
+   views, so the compiler cannot assume non-aliasing. */
 int validate(int *as_int) {
     *as_int = 1000;
     short s = 64;
-    memcpy(as_int, &s, sizeof(short));  /* defined: overwrite low half */
+    memcpy(as_int, &s, sizeof(short));  
     
     if (*as_int > MAX_LEN)
         return 0;

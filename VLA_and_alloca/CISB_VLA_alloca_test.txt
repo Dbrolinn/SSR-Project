@@ -1,8 +1,6 @@
 
-================================================================================
   CISB TEST — VARIABLE LENGTH ARRAYS (VLA) & alloca() STACK EXHAUSTION
   Full test package: code, commands, assembly analysis, statistics
-================================================================================
 
 This test demonstrates how unbounded stack allocation (via VLAs or alloca())
 can exhaust the stack and skip the guard page, leading to a "stack clash" that
@@ -26,185 +24,28 @@ So the "fixes" fall into three categories:
   - REAL FIX   : code change to bounded allocation (fixed buffer or checked malloc)
 
 
-  CODE
-
-Create a working directory first:
-
-    mkdir vla_test && cd vla_test
-
-
-  FILE 1 — vuln_vla.c   (vulnerable: VLA — the implicit kind)
-
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-
-    /* Processes a request whose size comes from untrusted input.
-       The VLA grows the stack by an attacker-controlled amount.    */
-    void process(unsigned long n) {
-
-        /* VARIABLE LENGTH ARRAY — allocation size is a runtime value.
-           If n is huge, this jumps the stack pointer far past the
-           guard page with no allocation-failure check possible.      */
-        char buffer[n];                       /* <-- the dangerous line */
-
-        /* Touch the memory so the allocation is not optimized away */
-        memset(buffer, 'A', n);
-        buffer[0] = 'X';
-
-        printf("[vla] allocated %lu bytes on stack, buffer[0]=%c\n",
-               n, buffer[0]);
-    }
-
-    int main(int argc, char **argv) {
-        /* size taken from command line = simulated untrusted input */
-        unsigned long n = (argc > 1) ? strtoul(argv[1], NULL, 10) : 64;
-
-        printf("=== VLA stack exhaustion demo ===\n");
-        printf("Requested allocation: %lu bytes\n\n", n);
-
-        process(n);
-
-        printf("[vla] returned normally\n");
-        return 0;
-    }
-
-
-  FILE 2 — vuln_alloca.c   (vulnerable: alloca() — the explicit kind)
-
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-    #include <alloca.h>
-
-    void process(unsigned long n) {
-
-        /* alloca() allocates n bytes on the stack of the CALLING function.
-           Same danger as a VLA: no failure signal, silent guard-page skip. */
-        char *buffer = (char *) alloca(n);    /* <-- the dangerous line */
-
-        memset(buffer, 'A', n);
-        buffer[0] = 'X';
-
-        printf("[alloca] allocated %lu bytes on stack, buffer[0]=%c\n",
-               n, buffer[0]);
-    }
-
-    int main(int argc, char **argv) {
-        unsigned long n = (argc > 1) ? strtoul(argv[1], NULL, 10) : 64;
-
-        printf("=== alloca() stack exhaustion demo ===\n");
-        printf("Requested allocation: %lu bytes\n\n", n);
-
-        process(n);
-
-        printf("[alloca] returned normally\n");
-        return 0;
-    }
-
-
-  FILE 3 — fixed_buffer.c   (safe fix A: fixed-size buffer with bound check)
-
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-
-    #define MAX_BUFFER 4096        /* compile-time constant upper bound */
-
-    void process(unsigned long n) {
-
-        /* BOUND CHECK FIRST — reject anything that would not fit */
-        if (n > MAX_BUFFER) {
-            fprintf(stderr, "[fixed-buf] request %lu exceeds limit %d - rejected\n",
-                    n, MAX_BUFFER);
-            return;
-        }
-
-        /* FIXED-SIZE buffer: allocation is a compile-time constant.
-           Stack growth is bounded and known at compile time.        */
-        char buffer[MAX_BUFFER];
-
-        memset(buffer, 'A', n);
-        buffer[0] = 'X';
-
-        printf("[fixed-buf] handled %lu bytes safely, buffer[0]=%c\n",
-               n, buffer[0]);
-    }
-
-    int main(int argc, char **argv) {
-        unsigned long n = (argc > 1) ? strtoul(argv[1], NULL, 10) : 64;
-
-        printf("=== Fixed-buffer (safe) demo ===\n");
-        printf("Requested allocation: %lu bytes\n\n", n);
-
-        process(n);
-
-        printf("[fixed-buf] returned normally\n");
-        return 0;
-    }
-
-
-  FILE 4 — fixed_malloc.c   (safe fix B: heap allocation with NULL check)
-
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-
-    void process(unsigned long n) {
-
-        /* HEAP allocation: malloc returns NULL on failure, which we
-           can detect and handle. No silent stack guard-page skip.    */
-        char *buffer = (char *) malloc(n);
-
-        if (buffer == NULL) {
-            fprintf(stderr, "[malloc] allocation of %lu bytes failed - rejected\n", n);
-            return;
-        }
-
-        memset(buffer, 'A', n);
-        buffer[0] = 'X';
-
-        printf("[malloc] handled %lu bytes safely, buffer[0]=%c\n",
-               n, buffer[0]);
-
-        free(buffer);                          /* always free heap memory */
-    }
-
-    int main(int argc, char **argv) {
-        unsigned long n = (argc > 1) ? strtoul(argv[1], NULL, 10) : 64;
-
-        printf("=== malloc (safe) demo ===\n");
-        printf("Requested allocation: %lu bytes\n\n", n);
-
-        process(n);
-
-        printf("[malloc] returned normally\n");
-        return 0;
-    }
-
-
   COMPILING ALL VERSIONS
 
     # Record compiler version for the report
     gcc --version
 
-    # --- Vulnerable VLA, no protection ---
+    #  Vulnerable VLA, no protection 
     gcc -O2 -o vla_vuln              vuln_vla.c
 
-    # --- Vulnerable VLA, with -Wvla (DETECTION only: prints a warning) ---
+    #  Vulnerable VLA, with -Wvla (DETECTION only, it prints a warning) 
     gcc -O2 -Wvla -o vla_warned      vuln_vla.c
-    # ^ Note: this STILL produces a vulnerable binary; -Wvla only warns.
+    # Note: this STILL produces a vulnerable binary; -Wvla only warns.
 
-    # --- Vulnerable VLA, with stack-clash protection (MITIGATION) ---
+    # Vulnerable VLA, with stack-clash protection (MITIGATION) 
     gcc -O2 -fstack-clash-protection -o vla_clash  vuln_vla.c
 
-    # --- Vulnerable alloca, no protection ---
+    # Vulnerable alloca, no protection 
     gcc -O2 -o alloca_vuln           vuln_alloca.c
 
-    # --- Vulnerable alloca, with stack-clash protection ---
+    # Vulnerable alloca, with stack-clash protection 
     gcc -O2 -fstack-clash-protection -o alloca_clash  vuln_alloca.c
 
-    # --- Safe fixes (no special flags needed) ---
+    # Safe fixes (no special flags needed) 
     gcc -O2 -o fixed_buf             fixed_buffer.c
     gcc -O2 -o fixed_malloc          fixed_malloc.c
 
@@ -214,48 +55,35 @@ Create a working directory first:
 
 The argument is the allocation size in bytes. Small = safe, huge = exhaustion.
 
-    # --- Normal small allocation: everything works ---
+    # Normal small allocation: everything works 
     ./vla_vuln 64
     ./alloca_vuln 64
     ./fixed_buf 64
     ./fixed_malloc 64
 
-    # --- Huge allocation: trigger the stack exhaustion ---
+    # Huge allocation: trigger the stack exhaustion 
     # 8 GB request - far beyond the ~8 MB default stack
     ./vla_vuln 8000000000          # CRASH: segfault, no clean error
     ./alloca_vuln 8000000000       # CRASH: segfault, no clean error
 
-    # --- Same huge allocation with stack-clash protection ---
+    # Same huge allocation with stack-clash protection 
     ./vla_clash 8000000000         # CLEAN crash at guard page (controlled)
     ./alloca_clash 8000000000      # CLEAN crash at guard page (controlled)
 
-    # --- Same huge allocation, safe fixes ---
+    # Same huge allocation, safe fixes 
     ./fixed_buf 8000000000         # REJECTED gracefully: "exceeds limit"
     ./fixed_malloc 8000000000      # REJECTED gracefully: malloc returns NULL
-
-  WHAT YOU SHOULD OBSERVE:
-  - vla_vuln / alloca_vuln with a huge value: "Segmentation fault" with no
-    message from the program. The allocation skipped the guard page or
-    overflowed the stack silently.
-  - fixed_buf: prints "exceeds limit - rejected" and returns cleanly.
-  - fixed_malloc: prints "allocation failed - rejected" and returns cleanly.
-  - The fixed versions NEVER crash regardless of input size.
-
-  TIP: capture the exit reason for the report:
-    ./vla_vuln 8000000000 ; echo "exit code: $?"
-    # A segfault produces exit code 139 (128 + signal 11 = SIGSEGV)
-
 
  DETECTION: THE -Wvla WARNING
 
     # Compile the VLA version with -Wvla and capture the warning
     gcc -O2 -Wvla -o vla_warned vuln_vla.c 2>&1 | tee wvla_warning.txt
 
-  Expected warning (approximately):
+  Expected warning (more or less this):
     vuln_vla.c: In function 'process':
     vuln_vla.c:XX:9: warning: variable length array 'buffer' [-Wvla]
 
-  KEY POINT FOR REPORT: -Wvla is a COMPILE-TIME DETECTION mechanism. It does
+  -Wvla is a COMPILE-TIME DETECTION mechanism. It does
   NOT change the binary. The vla_warned binary is exactly as vulnerable as
   vla_vuln. To confirm:
 
@@ -276,9 +104,8 @@ Generate assembly for the key versions:
     gcc -O2 -S -o asm_fixed_buf.s  fixed_buffer.c
 
 WHAT TO LOOK FOR
-----------------
 
-(a) THE VLA STACK ADJUSTMENT (vuln_vla.c at -O2)
+THE VLA STACK ADJUSTMENT (vuln_vla.c at -O2)
     The stack pointer is moved by a RUNTIME value (a register), not a constant:
 
         ...
@@ -290,7 +117,7 @@ WHAT TO LOOK FOR
     The danger: a single large 'sub rsp, rax' can move rsp past the guard
     page in one jump, landing in valid mapped memory beyond it.
 
-(b) WITH -fstack-clash-protection (asm_vla_clash.s)
+WITH -fstack-clash-protection (asm_vla_clash.s)
     The compiler emits a PROBING LOOP that touches each page as the stack
     grows, so the guard page is always hit if the allocation is too large:
 
@@ -306,7 +133,7 @@ WHAT TO LOOK FOR
     probes every page. This guarantees the guard page is hit (clean crash)
     instead of being skipped (silent corruption).
 
-(c) FIXED BUFFER (asm_fixed_buf.s)
+FIXED BUFFER (asm_fixed_buf.s)
     The stack adjustment is a COMPILE-TIME CONSTANT:
 
         sub    rsp, 0x1010           ; <-- FIXED constant (MAX_BUFFER + frame)
@@ -314,19 +141,8 @@ WHAT TO LOOK FOR
     There is no runtime-variable stack growth at all. The allocation size
     is known at compile time and bounded.
 
-CONFIRM WITH grep
 
-    # Variable stack growth in the VLA version (sub rsp by a register):
-    grep -n "sub.*rsp.*r" asm_vla.s
-
-    # Page-probing loop introduced by stack-clash protection:
-    grep -n "or.*QWORD PTR \[rsp\]\|0x1000" asm_vla_clash.s
-
-    # Fixed constant stack growth in the safe version:
-    grep -n "sub.*rsp.*0x" asm_fixed_buf.s
-
-
- STATISTICS TO COLLECT (same format as previous tests)
+ STATISTICS TO COLLECT 
 
     # Binary sizes
     ls -la vla_vuln vla_clash alloca_vuln fixed_buf fixed_malloc
@@ -342,89 +158,3 @@ CONFIRM WITH grep
     ./vla_clash   8000000000 >/dev/null 2>&1 ; echo "vla_clash   : $?"
     ./fixed_buf   8000000000 >/dev/null 2>&1 ; echo "fixed_buf   : $?"
     ./fixed_malloc 8000000000 >/dev/null 2>&1 ; echo "fixed_malloc: $?"
-
-
-  TABLE TO FILL IN FOR THE REPORT
-
-  +-----------------+----------+-----------+-------------+-----------+-----------+
-  |  Version        | -Wvla    | Stack     | Binary size | proc()    | Exit code |
-  |                 | warning? | growth    |             | instrs    | on huge n |
-  +-----------------+----------+-----------+-------------+-----------+-----------+
-  | vla_vuln (-O2)  |  no      | variable  |   ~16 KB    |   ~XX     |  139 SEGV |
-  | vla_warned      |  YES     | variable  |   ~16 KB    |   ~XX     |  139 SEGV |
-  | vla_clash       |  no      | probed    |   ~16 KB    |   ~XX     |  134/clean|
-  | alloca_vuln     |  no      | variable  |   ~16 KB    |   ~XX     |  139 SEGV |
-  | fixed_buf       |  no      | constant  |   ~16 KB    |   ~XX     |   0 clean |
-  | fixed_malloc    |  no      | none(heap)|   ~16 KB    |   ~XX     |   0 clean |
-  +-----------------+----------+-----------+-------------+-----------+-----------+
-
-  The story this table tells:
-  - -Wvla detects but does not fix (vla_warned still segfaults).
-  - stack-clash-protection converts silent corruption into a controlled crash.
-  - Only the code fixes (fixed_buf, fixed_malloc) return cleanly (exit 0) by
-    rejecting oversized input.
-
- THE FIXES, SUMMARIZED
-
-  FIX A (DETECTION) — compiler flag -Wvla
-  
-  What it does : Emits a compile-time warning wherever a VLA is used.
-  What it does NOT do : Change runtime behavior. The binary is still vulnerable.
-  Use it for   : Finding all VLAs in a codebase during a security audit.
-  Command      : gcc -Wvla ...   (combine with -Werror=vla to make it fatal)
-
-  FIX B (MITIGATION) — compiler flag -fstack-clash-protection
-  
-  What it does : Makes the compiler probe each page as the stack grows, so a
-                 too-large allocation reliably hits the guard page.
-  What it does NOT do : Prevent the allocation from being attempted. It turns
-                 silent memory corruption into a clean, detectable crash.
-  Tradeoff     : Small code-size and performance cost from the probing loop.
-  Use it for   : Defense-in-depth on code that must use dynamic stack allocation.
-  Command      : gcc -fstack-clash-protection ...
-
-  FIX C (REAL FIX) — code change to bounded allocation
-  
-  Option 1 — Fixed-size buffer:
-       Replace  char buf[n];   with  char buf[MAX]; plus a bound check
-       if (n > MAX) reject. Stack growth becomes a compile-time constant.
-
-  Option 2 — Heap allocation with NULL check:
-       Replace  char buf[n];   with  char *buf = malloc(n);
-       then check  if (buf == NULL) reject.
-       The heap HAS a failure signal (NULL), unlike the stack.
-
-  Why this is the only complete fix:
-       It removes the unbounded, unsignaled stack growth entirely. Correct
-       under all compilers, all flags, all optimization levels. The flags
-       only detect or mitigate; the code change eliminates the root cause.
-
-  YOUR ORIGINAL UNDERSTANDING CONFIRMED WITH NUANCE:
-       "Stop using it and give it a determined number" is correct for the
-       fixed-buffer case. The important addition is: if you genuinely need a
-       dynamic size, move to malloc (heap) so you get a checkable NULL on
-       failure. Both are valid; the choice depends on whether the size truly
-       must vary at runtime.
-
- ADDITIONAL TESTS
-
-These are 4 related stack/allocation CISBs that fit your project and use the
-same methodology. worth adding these?
-
-  1. STACK CANARY / -fstack-protector
-     Demonstrate a buffer overflow being caught (or not) depending on whether
-     -fstack-protector / -fstack-protector-all is enabled. Very visual:
-     "stack smashing detected" abort vs silent corruption. Pairs naturally
-     with this VLA test since both are stack-integrity topics.
-     Flags: -fno-stack-protector (off) vs -fstack-protector-all (on).
-
-  2. _FORTIFY_SOURCE
-     Compile with -D_FORTIFY_SOURCE=2 -O2 and show that calls like memcpy,
-     strcpy, sprintf get compile-time and runtime bounds checks added. Show a
-     buffer overflow being caught by the fortified version and missed by the
-     unfortified one."the compiler can also HELP security" angle.
-
-
-================================================================================
-  END OF DOCUMENT
-================================================================================

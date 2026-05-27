@@ -37,8 +37,8 @@ Imagine this drawer contains the size of a network packet arriving from the inte
 3. CHECK: Is it bigger than 64?
    → Compiler uses the OLD value (1000) → YES, reject it
    BUT the REAL value in memory is 64 → should have accepted it
-An attacker can send a packet where:
 
+An attacker can send a packet where:
 The raw bytes look like 1000 (gets rejected)
 But after the conversion, it's actually 64 (should be accepted)
 
@@ -57,7 +57,6 @@ A packet that looks small to the check
 But is actually huge after processing
 The program then copies MORE DATA than it allocated space for
 This overwrites other memory → crash, or worse, the attacker gains control
-
 
 The fix
 Don't use two different types of sticky notes for the same drawer.

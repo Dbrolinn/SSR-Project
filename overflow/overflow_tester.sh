@@ -11,9 +11,9 @@ fi
 
 declare -a test_flags=("" "-O0" "-O1" "-O2" "-O3" "-O3 -fwrapv")
 
-echo "% =========================================================" > $LATEX_OUT
+echo ""
 echo "% Resultados Extraídos Automaticamente do overflow_tester.sh" >> $LATEX_OUT
-echo "% =========================================================" >> $LATEX_OUT
+echo "" 
 echo "" >> $LATEX_OUT
 
 evaluate_and_log() {
@@ -29,7 +29,7 @@ evaluate_and_log() {
     if [ $? -eq 0 ]; then
         local binary_size=$(stat -c%s $BIN)
         
-        # O argumento '1' diz ao C para disparar o gatilho da vulnerabilidade
+        # O argumento '1' diz ao C para disparar vulnerabilidade
         local status_raw=$($BIN -1)
         
         local terminal_status=""
@@ -60,9 +60,9 @@ evaluate_and_log() {
 }
 
 
-echo "######################################################################"
-echo " FASE 1: Evolução das Mitigações (Inclui Bug do Ext4 Linux Kernel)"
-echo "######################################################################"
+echo ""
+echo " Evolução das Mitigações (Inclui Bug do Ext4 Linux Kernel)"
+echo ""
 
 echo "\begin{table*}[htbp]" >> $LATEX_OUT
 echo "\centering" >> $LATEX_OUT
@@ -102,9 +102,8 @@ echo "" >> $LATEX_OUT
 
 
 echo ""
-echo "######################################################################"
-echo " FASE 2: Impacto dos Tipos de Dados na Norma C (Modelo: NAIVE fixo)"
-echo "######################################################################"
+echo " Impacto dos Tipos de Dados na Norma C (Modelo: NAIVE fixo)"
+echo ""
 
 echo "\begin{table*}[htbp]" >> $LATEX_OUT
 echo "\centering" >> $LATEX_OUT
@@ -135,7 +134,7 @@ done
 echo "\bottomrule \end{tabular} \end{table*}" >> $LATEX_OUT
 
 echo ""
-echo "======================================================================"
+echo ""
 echo " Teste concluído! O código LaTeX foi guardado no ficheiro:"
 echo " -> $LATEX_OUT"
-echo "======================================================================"
+echo ""

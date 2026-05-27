@@ -1,5 +1,5 @@
 #!/bin/bash
-#NULL POINTER CHECK REMOVAL — compile, run, assembly, statistics
+#NULL POINTER CHECK REMOVAL: compile, run, assembly, statistics
 #
 #  Expects in this directory:
 #    vuln.c        (vulnerable: dereference before null check)
